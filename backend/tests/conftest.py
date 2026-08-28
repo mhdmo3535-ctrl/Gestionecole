@@ -51,7 +51,8 @@ def db(engine):
         yield session
     finally:
         session.close()
-        trans.rollback()
+        if trans.is_active:          # un test peut avoir déclenché un abandon (IntegrityError)
+            trans.rollback()
         connection.close()
 
 

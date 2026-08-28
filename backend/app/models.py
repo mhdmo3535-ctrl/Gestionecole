@@ -78,13 +78,12 @@ class Classe(Base):
 
 class Utilisateur(Base):
     __tablename__ = "utilisateurs"
-    __table_args__ = (UniqueConstraint("ecole_id", "email"),)
 
     id: Mapped[int] = mapped_column(primary_key=True)
     ecole_id: Mapped[int] = mapped_column(ForeignKey("ecoles.id", ondelete="CASCADE"))
     nom: Mapped[str] = mapped_column(String(100))
     prenom: Mapped[str] = mapped_column(String(100))
-    email: Mapped[str] = mapped_column(String(150))
+    email: Mapped[str] = mapped_column(String(150), unique=True)
     mot_de_passe_hash: Mapped[str] = mapped_column(String(255))
     role: Mapped[str] = mapped_column(String(20))
     telephone: Mapped[str | None] = mapped_column(String(30))

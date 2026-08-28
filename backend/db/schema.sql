@@ -103,7 +103,10 @@ CREATE TABLE utilisateurs (
     ecole_id        BIGINT NOT NULL REFERENCES ecoles(id) ON DELETE CASCADE,
     nom             VARCHAR(100) NOT NULL,
     prenom          VARCHAR(100) NOT NULL,
-    email           VARCHAR(150) NOT NULL,
+    -- email unique au niveau GLOBAL (toutes écoles confondues) : la
+    -- connexion se fait par email seul, il ne doit donc pas être ambigu.
+    -- Une personne travaillant dans deux écoles utilise deux adresses.
+    email           VARCHAR(150) NOT NULL UNIQUE,
     mot_de_passe_hash VARCHAR(255) NOT NULL,
     -- rôle unique "admin" sans sous-niveaux, conforme
     -- (parent/eleve sont inclus ici aussi car le compte peut être créé
@@ -111,8 +114,7 @@ CREATE TABLE utilisateurs (
     role            VARCHAR(20) NOT NULL CHECK (role IN ('admin', 'enseignant', 'parent', 'eleve')),
     telephone       VARCHAR(30),
     actif           BOOLEAN NOT NULL DEFAULT true,
-    created_at      TIMESTAMPTZ NOT NULL DEFAULT now(),
-    UNIQUE (ecole_id, email)
+    created_at      TIMESTAMPTZ NOT NULL DEFAULT now()
 );
 
 -- (la table enseignant_affectations est créée plus bas, section 3bis :

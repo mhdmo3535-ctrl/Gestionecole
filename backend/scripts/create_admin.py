@@ -42,8 +42,8 @@ def main() -> int:
             print("Aucune école trouvée. Charge d'abord db/seed.sql.", file=sys.stderr)
             return 1
 
-        if db.scalar(select(Utilisateur).where(Utilisateur.ecole_id == ecole.id, Utilisateur.email == args.email)):
-            print(f"Un utilisateur avec l'email {args.email} existe déjà dans cette école.", file=sys.stderr)
+        if db.scalar(select(Utilisateur).where(Utilisateur.email == args.email)):
+            print(f"Un utilisateur avec l'email {args.email} existe déjà.", file=sys.stderr)
             return 1
 
         user = Utilisateur(
