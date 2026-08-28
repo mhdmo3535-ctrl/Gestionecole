@@ -54,3 +54,75 @@ class EleveOut(EleveBase):
     id: int
     ecole_id: int
     statut: str
+
+
+# ---------- Référentiel ----------
+
+class NiveauOut(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+
+    id: int
+    nom: str
+    cycle: str
+
+
+class SerieOut(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+
+    id: int
+    nom: str
+
+
+class AnneeScolaireCreate(BaseModel):
+    libelle: str = Field(min_length=1, max_length=20)
+    date_debut: date
+    date_fin: date
+    active: bool = True
+
+
+class AnneeScolaireUpdate(BaseModel):
+    libelle: str | None = Field(default=None, min_length=1, max_length=20)
+    date_debut: date | None = None
+    date_fin: date | None = None
+    active: bool | None = None
+
+
+class AnneeScolaireOut(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+
+    id: int
+    ecole_id: int
+    libelle: str
+    date_debut: date
+    date_fin: date
+    active: bool
+
+
+# ---------- Classes ----------
+
+class ClasseCreate(BaseModel):
+    nom: str = Field(min_length=1, max_length=50)
+    niveau_id: int
+    serie_id: int | None = None
+    annee_scolaire_id: int | None = None   # défaut : année scolaire active
+
+
+class ClasseUpdate(BaseModel):
+    nom: str | None = Field(default=None, min_length=1, max_length=50)
+    niveau_id: int | None = None
+    serie_id: int | None = None
+    annee_scolaire_id: int | None = None
+
+
+class ClasseOut(BaseModel):
+    id: int
+    ecole_id: int
+    nom: str
+    niveau_id: int
+    niveau_nom: str
+    cycle: str
+    serie_id: int | None
+    serie_nom: str | None
+    annee_scolaire_id: int
+    annee_libelle: str
+    effectif: int

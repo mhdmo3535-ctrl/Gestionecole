@@ -71,6 +71,10 @@ class Classe(Base):
     serie_id: Mapped[int | None] = mapped_column(ForeignKey("series.id"))
     nom: Mapped[str] = mapped_column(String(50))
 
+    niveau: Mapped[Niveau] = relationship(lazy="joined")
+    serie: Mapped[Serie | None] = relationship(lazy="joined")
+    annee_scolaire: Mapped[AnneeScolaire] = relationship(lazy="joined")
+
 
 class Utilisateur(Base):
     __tablename__ = "utilisateurs"

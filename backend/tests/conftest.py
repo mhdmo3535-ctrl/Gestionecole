@@ -20,7 +20,7 @@ from app.core.deps import get_db
 from app.core.security import hash_password
 from app.database import Base
 from app.main import app
-from app.models import Ecole, Utilisateur
+from app.models import AnneeScolaire, Ecole, Niveau, Serie, Utilisateur
 
 DB_DIR = Path(__file__).resolve().parents[1] / "db"
 TEST_DATABASE_URL = os.environ.get(
@@ -91,3 +91,23 @@ def auth_headers(client, admin) -> dict:
     )
     assert resp.status_code == 200, resp.text
     return {"Authorization": f"Bearer {resp.json()['access_token']}"}
+
+
+@pytest.fixture
+def annee_active(db, ecole) -> AnneeScolaire:
+    return db.query(AnneeScolaire).filter_by(ecole_id=ecole.id, active=True).first()
+
+
+@pytest.fixture
+def niveau_3e(db) -> Niveau:
+    return db.query(Niveau).filter_by(nom="3e").first()
+
+
+@pytest.fixture
+def niveau_tle(db) -> Niveau:
+    return db.query(Niveau).filter_by(nom="Tle").first()
+
+
+@pytest.fixture
+def serie_d(db) -> Serie:
+    return db.query(Serie).filter_by(nom="D").first()
