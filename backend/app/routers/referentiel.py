@@ -4,12 +4,11 @@ from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy import select
 
 from app.core.deps import CurrentUser, DbSession, require_roles
-from app.models import AnneeScolaire, Matiere, Niveau, Serie, Trimestre
+from app.models import AnneeScolaire, Niveau, Serie, Trimestre
 from app.schemas import (
     AnneeScolaireCreate,
     AnneeScolaireOut,
     AnneeScolaireUpdate,
-    MatiereOut,
     NiveauOut,
     SerieOut,
     TrimestreOut,
@@ -29,12 +28,6 @@ def lister_niveaux(user: CurrentUser, db: DbSession):
 @router.get("/series", response_model=list[SerieOut])
 def lister_series(user: CurrentUser, db: DbSession):
     return list(db.scalars(select(Serie).order_by(Serie.nom)))
-
-
-@router.get("/matieres", response_model=list[MatiereOut])
-def lister_matieres(user: CurrentUser, db: DbSession):
-    stmt = select(Matiere).where(Matiere.ecole_id == user.ecole_id).order_by(Matiere.nom)
-    return list(db.scalars(stmt))
 
 
 @router.get("/annees-scolaires", response_model=list[AnneeScolaireOut])

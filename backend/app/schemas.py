@@ -63,6 +63,36 @@ class MatiereOut(BaseModel):
     note_directe: bool
 
 
+class MatiereCreate(BaseModel):
+    nom: str = Field(min_length=1, max_length=100)
+    code: str | None = Field(default=None, max_length=20)
+    est_choix_langue: bool = False
+    note_directe: bool = False
+
+
+class MatiereUpdate(BaseModel):
+    nom: str | None = Field(default=None, min_length=1, max_length=100)
+    code: str | None = Field(default=None, max_length=20)
+    est_choix_langue: bool | None = None
+    note_directe: bool | None = None
+
+
+class CoefficientDeclare(BaseModel):
+    niveau_id: int | None = None
+    serie_id: int | None = None
+    coefficient: float = Field(gt=0, le=99)
+
+
+class CoefficientOut(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+
+    id: int
+    matiere_id: int
+    niveau_id: int | None
+    serie_id: int | None
+    coefficient: float
+
+
 # ---------- Affectations enseignant ----------
 
 class AffectationCreate(BaseModel):
@@ -250,3 +280,59 @@ class NoteOut(BaseModel):
     # calculé, non stocké :
     moyenne: float | None = None      # moyenne de la matière si exploitable
     statut: str = "sans_note"         # sans_note | incomplete | calculee | directe
+
+
+# ---------- Bulletins ----------
+
+class BulletinLigne(BaseModel):
+    matiere_id: int
+    matiere_nom: str
+    coefficient: float
+    note_directe: bool
+    moyenne: float | None
+    moyenne_affichee: str | None
+    moyenne_coefficientee: float | None
+    rang: int | None
+    statut: str                       # sans_note | incomplete | calculee | directe
+    appreciation: str | None = None
+
+
+class BulletinEleve(BaseModel):
+    eleve_id: int
+    matricule: str
+    nom: str
+    prenom: str
+    classe_id: int
+    classe_nom: str
+    trimestre_id: int
+    trimestre_numero: int
+    lignes: list[BulletinLigne]
+    moyenne_generale: float | None
+    moyenne_generale_affichee: str | None
+    rang: int | None
+    effectif_classe: int
+    mode_calcul_annuel: str
+    moyenne_annuelle: float | None = None
+    moyenne_annuelle_affichee: str | None = None
+    decision: str | None = None       # admis | redouble (si l'année est complète)
+
+
+class BulletinClasseLigne(BaseModel):
+    eleve_id: int
+    matricule: str
+    nom: str
+    prenom: str
+    moyenne_generale: float | None
+    moyenne_generale_affichee: str | None
+    rang: int | None
+    moyenne_annuelle: float | None = None
+    decision: str | None = None
+
+
+class BulletinClasse(BaseModel):
+    classe_id: int
+    classe_nom: str
+    trimestre_id: int
+    trimestre_numero: int
+    effectif_classe: int
+    eleves: list[BulletinClasseLigne]

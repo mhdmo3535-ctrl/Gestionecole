@@ -4,7 +4,16 @@ from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
 from app.config import settings
-from app.routers import auth, classes, eleves, notes, referentiel, utilisateurs
+from app.routers import (
+    auth,
+    bulletins,
+    classes,
+    eleves,
+    matieres,
+    notes,
+    referentiel,
+    utilisateurs,
+)
 
 app = FastAPI(title="GestionEcole API", version="0.1.0")
 
@@ -18,10 +27,12 @@ app.add_middleware(
 
 app.include_router(auth.router)
 app.include_router(referentiel.router)
+app.include_router(matieres.router)
 app.include_router(utilisateurs.router)
 app.include_router(classes.router)
 app.include_router(eleves.router)
 app.include_router(notes.router)
+app.include_router(bulletins.router)
 
 
 @app.get("/health", tags=["health"])
