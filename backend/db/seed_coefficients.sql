@@ -152,3 +152,28 @@ CROSS JOIN (VALUES
 JOIN series s     ON s.nom = v.serie
 JOIN matieres mat ON mat.ecole_id = e.id AND mat.nom = v.matiere
 ON CONFLICT ON CONSTRAINT coefficients_cle DO NOTHING;
+
+-- ---------- Conduite ----------
+-- Matière "note directe" : une seule note /20 par trimestre, saisie par
+-- l'administration. Elle entre dans la moyenne générale du trimestre avec
+-- son coefficient, comme une matière ordinaire.
+-- Coefficient posé à 1 partout (collège + toutes séries) — valeur de
+-- départ prévisible, à ajuster par l'école pilote si besoin.
+WITH e AS (SELECT id FROM ecoles WHERE est_pilote = true ORDER BY id LIMIT 1)
+INSERT INTO matieres (ecole_id, nom, est_choix_langue, note_directe)
+SELECT e.id, 'Conduite', false, true FROM e
+ON CONFLICT (ecole_id, nom) DO NOTHING;
+
+WITH e AS (SELECT id FROM ecoles WHERE est_pilote = true ORDER BY id LIMIT 1),
+     mat AS (SELECT id FROM matieres WHERE ecole_id = (SELECT id FROM e) AND nom = 'Conduite')
+INSERT INTO coefficients (ecole_id, niveau_id, serie_id, matiere_id, coefficient)
+SELECT (SELECT id FROM e), n.id, NULL, (SELECT id FROM mat), 1
+FROM niveaux n WHERE n.cycle = 'college'
+ON CONFLICT ON CONSTRAINT coefficients_cle DO NOTHING;
+
+WITH e AS (SELECT id FROM ecoles WHERE est_pilote = true ORDER BY id LIMIT 1),
+     mat AS (SELECT id FROM matieres WHERE ecole_id = (SELECT id FROM e) AND nom = 'Conduite')
+INSERT INTO coefficients (ecole_id, niveau_id, serie_id, matiere_id, coefficient)
+SELECT (SELECT id FROM e), NULL, s.id, (SELECT id FROM mat), 1
+FROM series s
+ON CONFLICT ON CONSTRAINT coefficients_cle DO NOTHING;

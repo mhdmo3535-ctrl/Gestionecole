@@ -12,6 +12,10 @@ Règles (validées avec le porteur du projet le 2026-08-28) :
                       -> les 3 interros pèsent ensemble autant qu'UN devoir
 * Moyenne coeff.    = Moyenne matière x coefficient
 * Moyenne générale  = somme(moyennes coeff.) / somme(coefficients)
+                      -> une matière "note directe" (ex : Conduite) y entre
+                         exactement comme les autres : sa note x son coefficient.
+                         La formule ne change pas, c'est juste un terme de plus
+                         dans la somme pondérée (aucun résultat faussé).
 * Moyenne annuelle  = (T1 + T2 + T3) / 3            [mode "poids_egal"]
                       (T1 + T2 + 2*T3) / 4          [mode "t3_renforce"]
 * Aucun arrondi des moyennes : calcul en pleine précision, affichage à
@@ -96,6 +100,22 @@ def evaluer_matiere(
         return ResultatMatiere(matiere_id, coef, None, incomplete=True)
 
     return ResultatMatiere(matiere_id, coef, moyenne_matiere(i1, i2, i3, d1, d2))
+
+
+def evaluer_note_directe(
+    matiere_id: int,
+    coefficient: Nombre,
+    note: Nombre | None,
+) -> ResultatMatiere:
+    """Matière notée par une seule valeur (ex : Conduite).
+
+    Le résultat s'ajoute tel quel à la liste passée à ``moyenne_generale`` :
+    il compte comme une matière ordinaire, avec son coefficient.
+    """
+    coef = _d(coefficient)
+    if note is None:
+        return ResultatMatiere(matiere_id, coef, None, sans_note=True)
+    return ResultatMatiere(matiere_id, coef, _d(note))
 
 
 def moyenne_generale(resultats: list[ResultatMatiere]) -> Decimal | None:

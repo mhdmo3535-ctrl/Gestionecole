@@ -13,6 +13,7 @@ from app.calcul import (
     decision_annuelle,
     effectif_classe,
     evaluer_matiere,
+    evaluer_note_directe,
     format_note,
     moyenne_annuelle,
     moyenne_generale,
@@ -96,6 +97,37 @@ def test_moyenne_generale_exclut_matiere_sans_moyenne():
 def test_moyenne_generale_aucune_matiere():
     assert moyenne_generale([]) is None
     assert moyenne_generale([ResultatMatiere(1, D(2), None, sans_note=True)]) is None
+
+
+# ---------- Conduite (matière "note directe") ----------
+
+def test_note_directe_slot_dans_resultat_matiere():
+    r = evaluer_note_directe(99, D(1), D("15"))
+    assert r.moyenne == D(15)
+    assert not r.incomplete and not r.sans_note
+
+
+def test_note_directe_absente():
+    r = evaluer_note_directe(99, D(1), None)
+    assert r.moyenne is None and r.sans_note
+
+
+def test_conduite_entre_dans_la_moyenne_du_trimestre():
+    # 2 matières scolaires + la conduite, la formule pondérée les traite pareil
+    resultats = [
+        ResultatMatiere(1, D(3), D(10)),                  # 30
+        ResultatMatiere(2, D(2), D(15)),                  # 30
+        evaluer_note_directe(3, D(1), D("6")),            # conduite : 6
+    ]
+    # (30 + 30 + 6) / (3 + 2 + 1) = 66 / 6 = 11
+    assert moyenne_generale(resultats) == D(11)
+
+
+def test_sans_conduite_le_resultat_differe():
+    sans = [ResultatMatiere(1, D(3), D(10)), ResultatMatiere(2, D(2), D(15))]
+    avec = sans + [evaluer_note_directe(3, D(1), D("6"))]
+    assert moyenne_generale(sans) == D(12)   # 60 / 5
+    assert moyenne_generale(avec) == D(11)   # 66 / 6  -> la conduite pèse, sans fausser la formule
 
 
 # ---------- Moyenne annuelle ----------

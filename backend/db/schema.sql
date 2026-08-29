@@ -151,6 +151,11 @@ CREATE TABLE matieres (
     nom                 VARCHAR(100) NOT NULL,           -- 'Mathématiques', 'LV1', 'Anglais', ...
     code                VARCHAR(20),
     est_choix_langue    BOOLEAN NOT NULL DEFAULT false,   -- true pour les lignes LV1/LV2
+    -- note_directe = true : matière notée par UNE seule valeur par trimestre,
+    -- sans interros/devoirs (ex : Conduite). Cette valeur entre dans la
+    -- moyenne générale du trimestre avec son coefficient, comme une matière
+    -- ordinaire (cf notes.note_directe).
+    note_directe        BOOLEAN NOT NULL DEFAULT false,
     UNIQUE (ecole_id, nom)
 );
 
@@ -294,18 +299,29 @@ CREATE TABLE notes (
     eleve_id        BIGINT NOT NULL REFERENCES eleves(id) ON DELETE CASCADE,
     matiere_id      BIGINT NOT NULL REFERENCES matieres(id) ON DELETE CASCADE,
     trimestre_id    BIGINT NOT NULL REFERENCES trimestres(id) ON DELETE CASCADE,
+    -- cas ordinaire : 3 interros + 2 devoirs
     interro1        NUMERIC(4,2) CHECK (interro1 BETWEEN 0 AND 20),
     interro2        NUMERIC(4,2) CHECK (interro2 BETWEEN 0 AND 20),
     interro3        NUMERIC(4,2) CHECK (interro3 BETWEEN 0 AND 20),
     devoir1         NUMERIC(4,2) CHECK (devoir1 BETWEEN 0 AND 20),
     devoir2         NUMERIC(4,2) CHECK (devoir2 BETWEEN 0 AND 20),
-    saisi_par       BIGINT REFERENCES utilisateurs(id),      -- enseignant
+    -- cas des matières note_directe (ex : Conduite) : une seule valeur,
+    -- les colonnes interro*/devoir* restent NULL.
+    note_directe    NUMERIC(4,2) CHECK (note_directe BETWEEN 0 AND 20),
+    appreciation    TEXT,
+    saisi_par       BIGINT REFERENCES utilisateurs(id),      -- enseignant (ou administration pour la conduite)
     valide          BOOLEAN NOT NULL DEFAULT false,           -- validation admin
     valide_par      BIGINT REFERENCES utilisateurs(id),
     valide_le       TIMESTAMPTZ,
     created_at      TIMESTAMPTZ NOT NULL DEFAULT now(),
     updated_at      TIMESTAMPTZ NOT NULL DEFAULT now(),
-    UNIQUE (eleve_id, matiere_id, trimestre_id)
+    UNIQUE (eleve_id, matiere_id, trimestre_id),
+    -- une ligne est soit "évaluations", soit "note directe", jamais les deux
+    CONSTRAINT notes_un_seul_mode CHECK (
+        note_directe IS NULL
+        OR (interro1 IS NULL AND interro2 IS NULL AND interro3 IS NULL
+            AND devoir1 IS NULL AND devoir2 IS NULL)
+    )
 );
 
 CREATE TRIGGER trg_notes_updated_at
