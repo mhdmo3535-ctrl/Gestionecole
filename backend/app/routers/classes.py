@@ -9,8 +9,9 @@ from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy import func, select
 
 from app.core.deps import CurrentUser, DbSession, require_roles
-from app.models import AnneeScolaire, Classe, Eleve, Niveau, Serie
-from app.schemas import ClasseCreate, ClasseOut, ClasseUpdate, EleveOut
+from app.models import AnneeScolaire, Classe, Eleve, Matiere, Niveau, Serie
+from app.schemas import ClasseCreate, ClasseMatiereOut, ClasseOut, ClasseUpdate, EleveOut
+from app.services.coefficients import matieres_de_la_classe
 
 router = APIRouter(prefix="/classes", tags=["classes"])
 
@@ -104,6 +105,31 @@ def lister_eleves_de_la_classe(classe_id: int, user: CurrentUser, db: DbSession)
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Classe introuvable.")
     stmt = select(Eleve).where(Eleve.classe_id == classe_id).order_by(Eleve.nom, Eleve.prenom)
     return list(db.scalars(stmt))
+
+
+@router.get("/{classe_id}/matieres", response_model=list[ClasseMatiereOut])
+def lister_matieres_de_la_classe(classe_id: int, user: CurrentUser, db: DbSession):
+    """Matières déclarées pour cette classe (via ``coefficients``) + coefficient."""
+    classe = db.get(Classe, classe_id)
+    if classe is None or classe.ecole_id != user.ecole_id:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Classe introuvable.")
+
+    paires = matieres_de_la_classe(
+        db, ecole_id=user.ecole_id, niveau_id=classe.niveau_id, serie_id=classe.serie_id
+    )
+    if not paires:
+        return []
+    matieres = {m.id: m for m in db.scalars(select(Matiere).where(Matiere.id.in_([p[0] for p in paires])))}
+    return [
+        ClasseMatiereOut(
+            matiere_id=mid,
+            nom=matieres[mid].nom,
+            note_directe=matieres[mid].note_directe,
+            coefficient=float(coef),
+        )
+        for mid, coef in paires
+        if mid in matieres
+    ]
 
 
 @router.post("", response_model=ClasseOut, status_code=status.HTTP_201_CREATED, dependencies=[AdminOnly])

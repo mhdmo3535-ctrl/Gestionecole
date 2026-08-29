@@ -1,6 +1,7 @@
 """Schémas Pydantic : formes des données en entrée et en sortie de l'API."""
 
 from datetime import date
+from typing import Annotated
 
 from pydantic import BaseModel, ConfigDict, Field
 
@@ -153,6 +154,21 @@ class AnneeScolaireOut(BaseModel):
     active: bool
 
 
+class TrimestreOut(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+
+    id: int
+    annee_scolaire_id: int
+    numero: int
+    date_debut: date | None
+    date_fin: date | None
+
+
+class TrimestreUpdate(BaseModel):
+    date_debut: date | None = None
+    date_fin: date | None = None
+
+
 # ---------- Classes ----------
 
 class ClasseCreate(BaseModel):
@@ -181,3 +197,56 @@ class ClasseOut(BaseModel):
     annee_scolaire_id: int
     annee_libelle: str
     effectif: int
+
+
+class ClasseMatiereOut(BaseModel):
+    """Une matière déclarée pour la classe, avec son coefficient résolu."""
+
+    matiere_id: int
+    nom: str
+    note_directe: bool
+    coefficient: float
+
+
+# ---------- Notes ----------
+
+Note20 = Annotated[float, Field(ge=0, le=20)]
+
+
+class NoteEcrire(BaseModel):
+    eleve_id: int
+    matiere_id: int
+    trimestre_id: int
+    interro1: Note20 | None = None
+    interro2: Note20 | None = None
+    interro3: Note20 | None = None
+    devoir1: Note20 | None = None
+    devoir2: Note20 | None = None
+    note_directe: Note20 | None = None
+    appreciation: str | None = None
+
+
+class NoteValidation(BaseModel):
+    valide: bool
+
+
+class NoteOut(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+
+    id: int
+    eleve_id: int
+    matiere_id: int
+    trimestre_id: int
+    interro1: float | None
+    interro2: float | None
+    interro3: float | None
+    devoir1: float | None
+    devoir2: float | None
+    note_directe: float | None
+    appreciation: str | None
+    saisi_par: int | None
+    valide: bool
+    valide_par: int | None
+    # calculé, non stocké :
+    moyenne: float | None = None      # moyenne de la matière si exploitable
+    statut: str = "sans_note"         # sans_note | incomplete | calculee | directe

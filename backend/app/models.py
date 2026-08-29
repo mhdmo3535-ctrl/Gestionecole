@@ -1,17 +1,21 @@
 """Modèles SQLAlchemy.
 
-Ne couvre pour l'instant que les tables nécessaires à l'authentification
-et à la gestion des élèves. Le schéma complet fait foi : backend/db/schema.sql.
-On ajoutera les autres modèles (notes, absences, paiements...) au fur et à mesure.
+Couvre les tables utilisées par l'API (auth, élèves, classes, référentiel,
+coefficients, notes). Le schéma complet fait foi : backend/db/schema.sql.
+Les modules restants (absences, discipline, paiements...) seront ajoutés au
+fur et à mesure.
 """
 
 from datetime import date, datetime
+from decimal import Decimal
 
 from sqlalchemy import (
     Boolean,
     Date,
     DateTime,
     ForeignKey,
+    Numeric,
+    SmallInteger,
     String,
     UniqueConstraint,
     func,
@@ -44,6 +48,19 @@ class AnneeScolaire(Base):
     date_debut: Mapped[date] = mapped_column(Date)
     date_fin: Mapped[date] = mapped_column(Date)
     active: Mapped[bool] = mapped_column(Boolean, default=True)
+
+
+class Trimestre(Base):
+    __tablename__ = "trimestres"
+    __table_args__ = (UniqueConstraint("annee_scolaire_id", "numero"),)
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    annee_scolaire_id: Mapped[int] = mapped_column(
+        ForeignKey("annees_scolaires.id", ondelete="CASCADE")
+    )
+    numero: Mapped[int] = mapped_column(SmallInteger)
+    date_debut: Mapped[date | None] = mapped_column(Date)
+    date_fin: Mapped[date | None] = mapped_column(Date)
 
 
 class Niveau(Base):
@@ -114,6 +131,50 @@ class EnseignantAffectation(Base):
 
     classe: Mapped[Classe] = relationship(lazy="joined")
     matiere: Mapped[Matiere] = relationship(lazy="joined")
+
+
+class Coefficient(Base):
+    __tablename__ = "coefficients"
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    ecole_id: Mapped[int] = mapped_column(ForeignKey("ecoles.id", ondelete="CASCADE"))
+    niveau_id: Mapped[int | None] = mapped_column(ForeignKey("niveaux.id"))
+    serie_id: Mapped[int | None] = mapped_column(ForeignKey("series.id"))
+    matiere_id: Mapped[int] = mapped_column(ForeignKey("matieres.id", ondelete="CASCADE"))
+    coefficient: Mapped[Decimal] = mapped_column(Numeric(3, 1))
+
+
+class CoefficientDefaut(Base):
+    __tablename__ = "coefficients_defaut"
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    ecole_id: Mapped[int] = mapped_column(ForeignKey("ecoles.id", ondelete="CASCADE"))
+    niveau_id: Mapped[int | None] = mapped_column(ForeignKey("niveaux.id"))
+    serie_id: Mapped[int | None] = mapped_column(ForeignKey("series.id"))
+    coefficient: Mapped[Decimal] = mapped_column(Numeric(3, 1))
+
+
+class Note(Base):
+    __tablename__ = "notes"
+    __table_args__ = (UniqueConstraint("eleve_id", "matiere_id", "trimestre_id"),)
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    eleve_id: Mapped[int] = mapped_column(ForeignKey("eleves.id", ondelete="CASCADE"))
+    matiere_id: Mapped[int] = mapped_column(ForeignKey("matieres.id", ondelete="CASCADE"))
+    trimestre_id: Mapped[int] = mapped_column(ForeignKey("trimestres.id", ondelete="CASCADE"))
+    interro1: Mapped[Decimal | None] = mapped_column(Numeric(4, 2))
+    interro2: Mapped[Decimal | None] = mapped_column(Numeric(4, 2))
+    interro3: Mapped[Decimal | None] = mapped_column(Numeric(4, 2))
+    devoir1: Mapped[Decimal | None] = mapped_column(Numeric(4, 2))
+    devoir2: Mapped[Decimal | None] = mapped_column(Numeric(4, 2))
+    note_directe: Mapped[Decimal | None] = mapped_column(Numeric(4, 2))
+    appreciation: Mapped[str | None] = mapped_column(String)
+    saisi_par: Mapped[int | None] = mapped_column(ForeignKey("utilisateurs.id"))
+    valide: Mapped[bool] = mapped_column(Boolean, default=False)
+    valide_par: Mapped[int | None] = mapped_column(ForeignKey("utilisateurs.id"))
+    valide_le: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
+    updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
 
 
 class Eleve(Base):

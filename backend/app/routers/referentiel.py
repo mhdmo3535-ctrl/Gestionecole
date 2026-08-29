@@ -4,7 +4,7 @@ from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy import select
 
 from app.core.deps import CurrentUser, DbSession, require_roles
-from app.models import AnneeScolaire, Matiere, Niveau, Serie
+from app.models import AnneeScolaire, Matiere, Niveau, Serie, Trimestre
 from app.schemas import (
     AnneeScolaireCreate,
     AnneeScolaireOut,
@@ -12,6 +12,8 @@ from app.schemas import (
     MatiereOut,
     NiveauOut,
     SerieOut,
+    TrimestreOut,
+    TrimestreUpdate,
 )
 
 router = APIRouter(tags=["référentiel"])
@@ -73,6 +75,9 @@ def creer_annee(data: AnneeScolaireCreate, user: CurrentUser, db: DbSession):
     if annee.active:
         _desactiver_autres_annees(db, user.ecole_id, sauf_id=None)
     db.add(annee)
+    db.flush()
+    # chaque année a ses 3 trimestres (dates à renseigner ensuite)
+    db.add_all([Trimestre(annee_scolaire_id=annee.id, numero=n) for n in (1, 2, 3)])
     db.commit()
     db.refresh(annee)
     return annee
@@ -99,6 +104,51 @@ def modifier_annee(annee_id: int, data: AnneeScolaireUpdate, user: CurrentUser, 
     db.commit()
     db.refresh(annee)
     return annee
+
+
+@router.get("/trimestres", response_model=list[TrimestreOut])
+def lister_trimestres(user: CurrentUser, db: DbSession, annee_scolaire_id: int | None = None):
+    if annee_scolaire_id is None:
+        annee = db.scalar(
+            select(AnneeScolaire).where(
+                AnneeScolaire.ecole_id == user.ecole_id, AnneeScolaire.active.is_(True)
+            )
+        )
+        if annee is None:
+            return []
+        annee_scolaire_id = annee.id
+    else:
+        annee = db.get(AnneeScolaire, annee_scolaire_id)
+        if annee is None or annee.ecole_id != user.ecole_id:
+            raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Année scolaire introuvable.")
+
+    stmt = (
+        select(Trimestre)
+        .where(Trimestre.annee_scolaire_id == annee_scolaire_id)
+        .order_by(Trimestre.numero)
+    )
+    return list(db.scalars(stmt))
+
+
+@router.patch("/trimestres/{trimestre_id}", response_model=TrimestreOut, dependencies=[AdminOnly])
+def modifier_trimestre(trimestre_id: int, data: TrimestreUpdate, user: CurrentUser, db: DbSession):
+    tri = db.get(Trimestre, trimestre_id)
+    if tri is None:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Trimestre introuvable.")
+    annee = db.get(AnneeScolaire, tri.annee_scolaire_id)
+    if annee is None or annee.ecole_id != user.ecole_id:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Trimestre introuvable.")
+
+    for field, value in data.model_dump(exclude_unset=True).items():
+        setattr(tri, field, value)
+    if tri.date_debut and tri.date_fin and tri.date_fin <= tri.date_debut:
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+            detail="La date de fin doit être postérieure à la date de début.",
+        )
+    db.commit()
+    db.refresh(tri)
+    return tri
 
 
 def _desactiver_autres_annees(db: DbSession, ecole_id: int, sauf_id: int | None) -> None:
