@@ -91,6 +91,31 @@ class Utilisateur(Base):
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
 
 
+class Matiere(Base):
+    __tablename__ = "matieres"
+    __table_args__ = (UniqueConstraint("ecole_id", "nom"),)
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    ecole_id: Mapped[int] = mapped_column(ForeignKey("ecoles.id", ondelete="CASCADE"))
+    nom: Mapped[str] = mapped_column(String(100))
+    code: Mapped[str | None] = mapped_column(String(20))
+    est_choix_langue: Mapped[bool] = mapped_column(Boolean, default=False)
+    note_directe: Mapped[bool] = mapped_column(Boolean, default=False)
+
+
+class EnseignantAffectation(Base):
+    __tablename__ = "enseignant_affectations"
+    __table_args__ = (UniqueConstraint("enseignant_id", "classe_id", "matiere_id"),)
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    enseignant_id: Mapped[int] = mapped_column(ForeignKey("utilisateurs.id", ondelete="CASCADE"))
+    classe_id: Mapped[int] = mapped_column(ForeignKey("classes.id", ondelete="CASCADE"))
+    matiere_id: Mapped[int] = mapped_column(ForeignKey("matieres.id", ondelete="CASCADE"))
+
+    classe: Mapped[Classe] = relationship(lazy="joined")
+    matiere: Mapped[Matiere] = relationship(lazy="joined")
+
+
 class Eleve(Base):
     __tablename__ = "eleves"
     __table_args__ = (UniqueConstraint("ecole_id", "matricule"),)

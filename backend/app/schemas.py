@@ -21,6 +21,61 @@ class UtilisateurOut(BaseModel):
     prenom: str
     email: str
     role: str
+    telephone: str | None = None
+    actif: bool = True
+
+
+ROLES_GERABLES = "^(admin|enseignant)$"   # parents/élèves : cycle de vie à part
+
+
+class UtilisateurCreate(BaseModel):
+    nom: str = Field(min_length=1, max_length=100)
+    prenom: str = Field(min_length=1, max_length=100)
+    email: str = Field(min_length=3, max_length=150)
+    mot_de_passe: str = Field(min_length=8, max_length=128)
+    role: str = Field(pattern=ROLES_GERABLES)
+    telephone: str | None = Field(default=None, max_length=30)
+
+
+class UtilisateurUpdate(BaseModel):
+    nom: str | None = Field(default=None, min_length=1, max_length=100)
+    prenom: str | None = Field(default=None, min_length=1, max_length=100)
+    role: str | None = Field(default=None, pattern=ROLES_GERABLES)
+    telephone: str | None = Field(default=None, max_length=30)
+    actif: bool | None = None
+
+
+class MotDePasseUpdate(BaseModel):
+    nouveau_mot_de_passe: str = Field(min_length=8, max_length=128)
+
+
+# ---------- Matières ----------
+
+class MatiereOut(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+
+    id: int
+    ecole_id: int
+    nom: str
+    code: str | None
+    est_choix_langue: bool
+    note_directe: bool
+
+
+# ---------- Affectations enseignant ----------
+
+class AffectationCreate(BaseModel):
+    classe_id: int
+    matiere_id: int
+
+
+class AffectationOut(BaseModel):
+    id: int
+    enseignant_id: int
+    classe_id: int
+    classe_nom: str
+    matiere_id: int
+    matiere_nom: str
 
 
 # ---------- Élèves ----------
