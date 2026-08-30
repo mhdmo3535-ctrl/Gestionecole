@@ -1,11 +1,13 @@
-import { Alert, Button, Card, Form, Input, Typography } from "antd";
+import { Alert, Button, Card, Form, Input, theme, Typography } from "antd";
 import { useState } from "react";
 import { Navigate, useNavigate } from "react-router-dom";
 import { messageErreur } from "../api/client";
 import { useAuth } from "../auth/AuthContext";
+import { COULEURS_BENIN, FILET_BENIN } from "../theme";
 
 export function LoginPage() {
   const { utilisateur, pret, connexion } = useAuth();
+  const { token } = theme.useToken();
   const navigate = useNavigate();
   const [erreur, setErreur] = useState<string | null>(null);
   const [enCours, setEnCours] = useState(false);
@@ -26,9 +28,10 @@ export function LoginPage() {
   }
 
   return (
-    <div style={{ display: "grid", placeItems: "center", minHeight: "100vh", background: "#f5f5f5" }}>
-      <Card style={{ width: 360 }}>
-        <Typography.Title level={3} style={{ marginTop: 0 }}>
+    <div style={{ display: "grid", placeItems: "center", minHeight: "100vh", background: token.colorBgLayout }}>
+      <Card style={{ width: 360, overflow: "hidden" }} styles={{ body: { paddingTop: 28 } }}>
+        <div style={{ position: "absolute", inset: "0 0 auto 0", height: 5, background: FILET_BENIN }} />
+        <Typography.Title level={3} style={{ marginTop: 0, color: COULEURS_BENIN.vert }}>
           Schoolaris
         </Typography.Title>
         <Typography.Paragraph type="secondary" style={{ marginTop: -8 }}>

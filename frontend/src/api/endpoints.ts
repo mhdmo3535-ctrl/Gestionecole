@@ -1,16 +1,26 @@
 import { api } from "./client";
 import type {
+  Absence,
   Affectation,
   AnneeScolaire,
   BulletinClasse,
   BulletinEleve,
   Classe,
   ClasseMatiere,
+  Coefficient,
+  Discipline,
+  Ecole,
   Eleve,
+  InfosMedicales,
+  LienParent,
   Matiere,
   Niveau,
+  ParentTuteur,
   Note,
+  Permission,
+  ProgressionEleve,
   Serie,
+  StatutPermission,
   Trimestre,
   Utilisateur,
 } from "./types";
@@ -32,6 +42,7 @@ export async function getMoi(): Promise<Utilisateur> {
 
 // ---------- Référentiel ----------
 
+export const getMonEcole = () => api.get<Ecole>("/ecole").then((r) => r.data);
 export const getNiveaux = () => api.get<Niveau[]>("/niveaux").then((r) => r.data);
 export const getSeries = () => api.get<Serie[]>("/series").then((r) => r.data);
 export const getAnneesScolaires = () =>
@@ -54,6 +65,69 @@ export interface ElevePayload {
 
 export const getEleves = (params?: { q?: string; classe_id?: number }) =>
   api.get<Eleve[]>("/eleves", { params }).then((r) => r.data);
+export const getEleve = (id: number) => api.get<Eleve>(`/eleves/${id}`).then((r) => r.data);
+
+export const getInfosMedicales = (eleveId: number) =>
+  api.get<InfosMedicales>(`/eleves/${eleveId}/infos-medicales`).then((r) => r.data);
+export const enregistrerInfosMedicales = (
+  eleveId: number,
+  payload: Partial<Pick<InfosMedicales, "groupe_sanguin" | "allergies" | "contacts_urgence" | "remarques">>,
+) => api.put<InfosMedicales>(`/eleves/${eleveId}/infos-medicales`, payload).then((r) => r.data);
+
+export interface ParentPayload {
+  nom: string;
+  prenom: string;
+  telephone?: string | null;
+  email?: string | null;
+  lien?: LienParent | null;
+}
+export const getParents = (eleveId: number) =>
+  api.get<ParentTuteur[]>(`/eleves/${eleveId}/parents`).then((r) => r.data);
+export const ajouterParent = (eleveId: number, payload: ParentPayload) =>
+  api.post<ParentTuteur>(`/eleves/${eleveId}/parents`, payload).then((r) => r.data);
+export const modifierParent = (eleveId: number, parentId: number, payload: Partial<ParentPayload>) =>
+  api.patch<ParentTuteur>(`/eleves/${eleveId}/parents/${parentId}`, payload).then((r) => r.data);
+export const retirerParent = (eleveId: number, parentId: number) =>
+  api.delete(`/eleves/${eleveId}/parents/${parentId}`);
+
+// ---------- Vie scolaire ----------
+
+export const getAbsences = (eleveId: number) =>
+  api.get<Absence[]>(`/eleves/${eleveId}/absences`).then((r) => r.data);
+export const ajouterAbsence = (
+  eleveId: number,
+  payload: { date: string; type: "absence" | "retard"; matiere_id?: number | null; justifiee?: boolean },
+) => api.post<Absence>(`/eleves/${eleveId}/absences`, payload).then((r) => r.data);
+export const retirerAbsence = (eleveId: number, id: number) =>
+  api.delete(`/eleves/${eleveId}/absences/${id}`);
+
+export const getDiscipline = (eleveId: number) =>
+  api.get<Discipline[]>(`/eleves/${eleveId}/discipline`).then((r) => r.data);
+export const ajouterDiscipline = (
+  eleveId: number,
+  payload: {
+    date?: string | null;
+    description: string;
+    gravite: "mineure" | "moyenne" | "grave";
+    sanction?: string | null;
+  },
+) => api.post<Discipline>(`/eleves/${eleveId}/discipline`, payload).then((r) => r.data);
+export const retirerDiscipline = (eleveId: number, id: number) =>
+  api.delete(`/eleves/${eleveId}/discipline/${id}`);
+
+export const getPermissions = (eleveId: number) =>
+  api.get<Permission[]>(`/eleves/${eleveId}/permissions`).then((r) => r.data);
+export const ajouterPermission = (
+  eleveId: number,
+  payload: { date_debut: string; date_fin: string; motif: string },
+) => api.post<Permission>(`/eleves/${eleveId}/permissions`, payload).then((r) => r.data);
+export const traiterPermission = (
+  eleveId: number,
+  id: number,
+  payload: { statut: StatutPermission; commentaire_traitement?: string | null },
+) => api.patch<Permission>(`/eleves/${eleveId}/permissions/${id}`, payload).then((r) => r.data);
+export const retirerPermission = (eleveId: number, id: number) =>
+  api.delete(`/eleves/${eleveId}/permissions/${id}`);
 export const creerEleve = (payload: ElevePayload) =>
   api.post<Eleve>("/eleves", payload).then((r) => r.data);
 export const modifierEleve = (id: number, payload: Partial<ElevePayload> & { statut?: string }) =>
@@ -70,6 +144,7 @@ export interface ClassePayload {
 
 export const getClasses = (params?: { annee_scolaire_id?: number; niveau_id?: number }) =>
   api.get<Classe[]>("/classes", { params }).then((r) => r.data);
+export const getClasse = (id: number) => api.get<Classe>(`/classes/${id}`).then((r) => r.data);
 export const creerClasse = (payload: ClassePayload) =>
   api.post<Classe>("/classes", payload).then((r) => r.data);
 export const modifierClasse = (id: number, payload: Partial<ClassePayload>) =>
@@ -83,14 +158,27 @@ export const getMatieresDeLaClasse = (id: number) =>
 // ---------- Matières ----------
 
 export const getMatieres = () => api.get<Matiere[]>("/matieres").then((r) => r.data);
+export const getMatiere = (id: number) => api.get<Matiere>(`/matieres/${id}`).then((r) => r.data);
 export const creerMatiere = (payload: {
   nom: string;
+  code?: string | null;
   note_directe?: boolean;
   est_choix_langue?: boolean;
 }) => api.post<Matiere>("/matieres", payload).then((r) => r.data);
-export const modifierMatiere = (id: number, payload: Partial<{ nom: string }>) =>
-  api.patch<Matiere>(`/matieres/${id}`, payload).then((r) => r.data);
+export const modifierMatiere = (
+  id: number,
+  payload: Partial<{ nom: string; code: string | null; note_directe: boolean; est_choix_langue: boolean }>,
+) => api.patch<Matiere>(`/matieres/${id}`, payload).then((r) => r.data);
 export const supprimerMatiere = (id: number) => api.delete(`/matieres/${id}`);
+
+export const getCoefficients = (matiereId: number) =>
+  api.get<Coefficient[]>(`/matieres/${matiereId}/coefficients`).then((r) => r.data);
+export const declarerCoefficient = (
+  matiereId: number,
+  payload: { niveau_id?: number | null; serie_id?: number | null; coefficient: number },
+) => api.put<Coefficient>(`/matieres/${matiereId}/coefficients`, payload).then((r) => r.data);
+export const retirerCoefficient = (matiereId: number, coefficientId: number) =>
+  api.delete(`/matieres/${matiereId}/coefficients/${coefficientId}`);
 
 // ---------- Utilisateurs & affectations ----------
 
@@ -105,6 +193,8 @@ export interface UtilisateurPayload {
 
 export const getUtilisateurs = (params?: { role?: string; actif?: boolean }) =>
   api.get<Utilisateur[]>("/utilisateurs", { params }).then((r) => r.data);
+export const getUtilisateur = (id: number) =>
+  api.get<Utilisateur>(`/utilisateurs/${id}`).then((r) => r.data);
 export const creerUtilisateur = (payload: UtilisateurPayload) =>
   api.post<Utilisateur>("/utilisateurs", payload).then((r) => r.data);
 export const modifierUtilisateur = (
@@ -161,3 +251,5 @@ export const getBulletinEleve = (eleveId: number, trimestreId: number) =>
   api
     .get<BulletinEleve>(`/eleves/${eleveId}/bulletin`, { params: { trimestre_id: trimestreId } })
     .then((r) => r.data);
+export const getProgressionEleve = (eleveId: number) =>
+  api.get<ProgressionEleve>(`/eleves/${eleveId}/progression`).then((r) => r.data);

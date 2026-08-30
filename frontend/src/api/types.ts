@@ -11,6 +11,17 @@ export interface Utilisateur {
   actif: boolean;
 }
 
+export interface Ecole {
+  id: number;
+  nom: string;
+  sigle: string | null;
+  adresse: string | null;
+  telephone: string | null;
+  email: string | null;
+  mode_calcul_moyenne_annuelle: string;
+  est_pilote: boolean;
+}
+
 export interface Niveau {
   id: number;
   nom: string;
@@ -72,6 +83,60 @@ export interface Eleve {
   statut: "actif" | "archive" | "redoublant";
 }
 
+export interface InfosMedicales {
+  eleve_id: number;
+  groupe_sanguin: string | null;
+  allergies: string | null;
+  contacts_urgence: string | null;
+  remarques: string | null;
+  updated_at: string | null;
+  updated_par: number | null;
+}
+
+export interface Absence {
+  id: number;
+  eleve_id: number;
+  date: string;
+  type: "absence" | "retard";
+  matiere_id: number | null;
+  justifiee: boolean;
+  permission_id: number | null;
+}
+
+export interface Discipline {
+  id: number;
+  eleve_id: number;
+  date: string;
+  description: string;
+  gravite: "mineure" | "moyenne" | "grave";
+  sanction: string | null;
+}
+
+export type StatutPermission = "en_attente" | "approuve" | "rejete";
+
+export interface Permission {
+  id: number;
+  eleve_id: number;
+  date_debut: string;
+  date_fin: string;
+  motif: string;
+  statut: StatutPermission;
+  commentaire_traitement: string | null;
+  traite_le: string | null;
+}
+
+export type LienParent = "pere" | "mere" | "tuteur";
+
+export interface ParentTuteur {
+  parent_id: number;
+  nom: string;
+  prenom: string;
+  telephone: string | null;
+  email: string | null;
+  lien: LienParent | null;
+  a_un_compte: boolean;
+}
+
 export interface Matiere {
   id: number;
   ecole_id: number;
@@ -79,6 +144,14 @@ export interface Matiere {
   code: string | null;
   est_choix_langue: boolean;
   note_directe: boolean;
+}
+
+export interface Coefficient {
+  id: number;
+  matiere_id: number;
+  niveau_id: number | null;
+  serie_id: number | null;
+  coefficient: number;
 }
 
 export interface Affectation {
@@ -163,4 +236,18 @@ export interface BulletinClasse {
   trimestre_numero: number;
   effectif_classe: number;
   eleves: BulletinClasseLigne[];
+}
+
+export interface ProgressionPoint {
+  trimestre_id: number;
+  trimestre_numero: number;
+  moyenne_generale: number | null;
+  moyenne_generale_affichee: string | null;
+}
+
+export interface ProgressionEleve {
+  eleve_id: number;
+  classe_id: number;
+  classe_nom: string;
+  points: ProgressionPoint[];
 }

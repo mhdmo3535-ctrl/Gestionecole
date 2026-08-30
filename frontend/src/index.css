@@ -8,3 +8,20 @@ body,
 body {
   font-family: system-ui, "Segoe UI", Roboto, sans-serif;
 }
+
+/* onglet de navigation actif : bien marqué */
+.ant-layout-sider .ant-menu-item-selected {
+  font-weight: 600;
+}
+
+/* fiches d'informations : libellés bien en gras, valeurs en graisse normale */
+.ant-descriptions-item-label {
+  font-weight: 700 !important;
+}
+.ant-descriptions-item-content {
+  font-weight: 400;
+}
+/* mêmes règles pour les en-têtes de colonnes de tableaux */
+.ant-table-thead > tr > th {
+  font-weight: 700 !important;
+}
