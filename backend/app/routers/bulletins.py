@@ -14,11 +14,14 @@ from app.schemas import (
     BulletinClasseLigne,
     BulletinEleve,
     BulletinLigne,
+    ProgressionEleve,
+    ProgressionPoint,
 )
 from app.services.bulletins import (
     BulletinClasseCalc,
     BulletinEleveCalc,
     construire_bulletins_classe,
+    progression_eleve,
 )
 
 # Génération des bulletins : directeur et censeur.
@@ -172,3 +175,30 @@ def bulletin_d_un_eleve(
             status_code=status.HTTP_404_NOT_FOUND, detail="Bulletin indisponible (élève archivé ?)."
         )
     return _bulletin_eleve_out(bulletin, calc, ecole.mode_calcul_moyenne_annuelle)
+
+
+@router.get("/eleves/{eleve_id}/progression", response_model=ProgressionEleve)
+def progression_d_un_eleve(eleve_id: int, user: CurrentUser, db: DbSession):
+    """Courbe de progression : moyenne générale par trimestre."""
+    eleve = db.get(Eleve, eleve_id)
+    if eleve is None or eleve.ecole_id != user.ecole_id:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Élève introuvable.")
+    if eleve.classe_id is None:
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+            detail="Cet élève n'est rattaché à aucune classe.",
+        )
+    classe = _classe_de_lecole(db, eleve.classe_id, user.ecole_id)
+
+    points = [
+        ProgressionPoint(
+            trimestre_id=t.id,
+            trimestre_numero=t.numero,
+            moyenne_generale=_f(m),
+            moyenne_generale_affichee=_aff(m),
+        )
+        for t, m in progression_eleve(db, eleve=eleve)
+    ]
+    return ProgressionEleve(
+        eleve_id=eleve.id, classe_id=classe.id, classe_nom=classe.nom, points=points
+    )

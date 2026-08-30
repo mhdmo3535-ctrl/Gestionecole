@@ -13,6 +13,7 @@ from app.routers import (
     notes,
     referentiel,
     utilisateurs,
+    vie_scolaire,
 )
 
 app = FastAPI(title="GestionEcole API", version="0.1.0")
@@ -33,6 +34,7 @@ app.include_router(classes.router)
 app.include_router(eleves.router)
 app.include_router(notes.router)
 app.include_router(bulletins.router)
+app.include_router(vie_scolaire.router)
 
 
 @app.get("/health", tags=["health"])

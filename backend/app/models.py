@@ -17,6 +17,7 @@ from sqlalchemy import (
     Numeric,
     SmallInteger,
     String,
+    Text,
     UniqueConstraint,
     func,
 )
@@ -131,6 +132,90 @@ class EnseignantAffectation(Base):
 
     classe: Mapped[Classe] = relationship(lazy="joined")
     matiere: Mapped[Matiere] = relationship(lazy="joined")
+
+
+class Parent(Base):
+    __tablename__ = "parents"
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    ecole_id: Mapped[int] = mapped_column(ForeignKey("ecoles.id", ondelete="CASCADE"))
+    utilisateur_id: Mapped[int | None] = mapped_column(ForeignKey("utilisateurs.id"))
+    nom: Mapped[str] = mapped_column(String(100))
+    prenom: Mapped[str] = mapped_column(String(100))
+    telephone: Mapped[str | None] = mapped_column(String(30))
+    email: Mapped[str | None] = mapped_column(String(150))
+
+
+class EleveParent(Base):
+    __tablename__ = "eleve_parents"
+
+    eleve_id: Mapped[int] = mapped_column(
+        ForeignKey("eleves.id", ondelete="CASCADE"), primary_key=True
+    )
+    parent_id: Mapped[int] = mapped_column(
+        ForeignKey("parents.id", ondelete="CASCADE"), primary_key=True
+    )
+    lien: Mapped[str | None] = mapped_column(String(20))
+
+    parent: Mapped[Parent] = relationship(lazy="joined")
+
+
+class Absence(Base):
+    __tablename__ = "absences"
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    eleve_id: Mapped[int] = mapped_column(ForeignKey("eleves.id", ondelete="CASCADE"))
+    date: Mapped[date] = mapped_column(Date)
+    matiere_id: Mapped[int | None] = mapped_column(ForeignKey("matieres.id"))
+    type: Mapped[str] = mapped_column(String(20), default="absence")
+    justifiee: Mapped[bool] = mapped_column(Boolean, default=False)
+    permission_id: Mapped[int | None] = mapped_column(ForeignKey("permissions_absence.id"))
+    saisi_par: Mapped[int | None] = mapped_column(ForeignKey("utilisateurs.id"))
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
+
+    matiere: Mapped["Matiere | None"] = relationship(lazy="joined")
+
+
+class Discipline(Base):
+    __tablename__ = "discipline"
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    eleve_id: Mapped[int] = mapped_column(ForeignKey("eleves.id", ondelete="CASCADE"))
+    date: Mapped[date] = mapped_column(Date, server_default=func.current_date())
+    description: Mapped[str] = mapped_column(Text)
+    gravite: Mapped[str] = mapped_column(String(10), default="mineure")
+    sanction: Mapped[str | None] = mapped_column(Text)
+    signale_par: Mapped[int | None] = mapped_column(ForeignKey("utilisateurs.id"))
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
+
+
+class PermissionAbsence(Base):
+    __tablename__ = "permissions_absence"
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    eleve_id: Mapped[int] = mapped_column(ForeignKey("eleves.id", ondelete="CASCADE"))
+    date_debut: Mapped[date] = mapped_column(Date)
+    date_fin: Mapped[date] = mapped_column(Date)
+    motif: Mapped[str] = mapped_column(Text)
+    statut: Mapped[str] = mapped_column(String(20), default="en_attente")
+    traite_par: Mapped[int | None] = mapped_column(ForeignKey("utilisateurs.id"))
+    commentaire_traitement: Mapped[str | None] = mapped_column(Text)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
+    traite_le: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+
+
+class EleveInfosMedicales(Base):
+    __tablename__ = "eleve_infos_medicales"
+
+    eleve_id: Mapped[int] = mapped_column(
+        ForeignKey("eleves.id", ondelete="CASCADE"), primary_key=True
+    )
+    groupe_sanguin: Mapped[str | None] = mapped_column(String(5))
+    allergies: Mapped[str | None] = mapped_column(Text)
+    contacts_urgence: Mapped[str | None] = mapped_column(Text)
+    remarques: Mapped[str | None] = mapped_column(Text)
+    updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
+    updated_par: Mapped[int | None] = mapped_column(ForeignKey("utilisateurs.id"))
 
 
 class Coefficient(Base):

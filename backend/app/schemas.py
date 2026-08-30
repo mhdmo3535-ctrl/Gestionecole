@@ -1,6 +1,7 @@
 """Schémas Pydantic : formes des données en entrée et en sortie de l'API."""
 
-from datetime import date
+import datetime as _dt
+from datetime import date, datetime
 from typing import Annotated
 
 from pydantic import BaseModel, ConfigDict, Field
@@ -142,7 +143,131 @@ class EleveOut(EleveBase):
     statut: str
 
 
+class InfosMedicalesOut(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+
+    eleve_id: int
+    groupe_sanguin: str | None = None
+    allergies: str | None = None
+    contacts_urgence: str | None = None
+    remarques: str | None = None
+    updated_at: datetime | None = None
+    updated_par: int | None = None
+
+
+class InfosMedicalesUpdate(BaseModel):
+    groupe_sanguin: str | None = Field(default=None, max_length=5)
+    allergies: str | None = None
+    contacts_urgence: str | None = None
+    remarques: str | None = None
+
+
+LIEN_PARENT = "^(pere|mere|tuteur)$"
+
+
+class ParentOut(BaseModel):
+    parent_id: int
+    nom: str
+    prenom: str
+    telephone: str | None
+    email: str | None
+    lien: str | None
+    a_un_compte: bool
+
+
+class ParentCreate(BaseModel):
+    nom: str = Field(min_length=1, max_length=100)
+    prenom: str = Field(min_length=1, max_length=100)
+    telephone: str | None = Field(default=None, max_length=30)
+    email: str | None = Field(default=None, max_length=150)
+    lien: str | None = Field(default=None, pattern=LIEN_PARENT)
+
+
+class ParentUpdate(BaseModel):
+    nom: str | None = Field(default=None, min_length=1, max_length=100)
+    prenom: str | None = Field(default=None, min_length=1, max_length=100)
+    telephone: str | None = Field(default=None, max_length=30)
+    email: str | None = Field(default=None, max_length=150)
+    lien: str | None = Field(default=None, pattern=LIEN_PARENT)
+
+
+# ---------- Vie scolaire : absences, discipline, permissions ----------
+
+class AbsenceCreate(BaseModel):
+    date: _dt.date
+    type: str = Field(default="absence", pattern="^(absence|retard)$")
+    matiere_id: int | None = None
+    justifiee: bool = False
+
+
+class AbsenceOut(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+
+    id: int
+    eleve_id: int
+    date: _dt.date
+    type: str
+    matiere_id: int | None
+    justifiee: bool
+    permission_id: int | None
+
+
+class DisciplineCreate(BaseModel):
+    date: _dt.date | None = None
+    description: str = Field(min_length=1)
+    gravite: str = Field(default="mineure", pattern="^(mineure|moyenne|grave)$")
+    sanction: str | None = None
+
+
+class DisciplineOut(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+
+    id: int
+    eleve_id: int
+    date: _dt.date
+    description: str
+    gravite: str
+    sanction: str | None
+
+
+class PermissionCreate(BaseModel):
+    date_debut: date
+    date_fin: date
+    motif: str = Field(min_length=1)
+
+
+class PermissionTraitement(BaseModel):
+    statut: str = Field(pattern="^(approuve|rejete|en_attente)$")
+    commentaire_traitement: str | None = None
+
+
+class PermissionOut(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+
+    id: int
+    eleve_id: int
+    date_debut: date
+    date_fin: date
+    motif: str
+    statut: str
+    commentaire_traitement: str | None
+    traite_le: datetime | None
+
+
 # ---------- Référentiel ----------
+
+class EcoleOut(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+
+    id: int
+    nom: str
+    sigle: str | None
+    adresse: str | None
+    telephone: str | None
+    email: str | None
+    mode_calcul_moyenne_annuelle: str
+    est_pilote: bool
+
 
 class NiveauOut(BaseModel):
     model_config = ConfigDict(from_attributes=True)
@@ -336,3 +461,17 @@ class BulletinClasse(BaseModel):
     trimestre_numero: int
     effectif_classe: int
     eleves: list[BulletinClasseLigne]
+
+
+class ProgressionPoint(BaseModel):
+    trimestre_id: int
+    trimestre_numero: int
+    moyenne_generale: float | None
+    moyenne_generale_affichee: str | None
+
+
+class ProgressionEleve(BaseModel):
+    eleve_id: int
+    classe_id: int
+    classe_nom: str
+    points: list[ProgressionPoint]

@@ -4,11 +4,12 @@ from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy import select
 
 from app.core.deps import CurrentUser, DbSession, require_roles
-from app.models import AnneeScolaire, Niveau, Serie, Trimestre
+from app.models import AnneeScolaire, Ecole, Niveau, Serie, Trimestre
 from app.schemas import (
     AnneeScolaireCreate,
     AnneeScolaireOut,
     AnneeScolaireUpdate,
+    EcoleOut,
     NiveauOut,
     SerieOut,
     TrimestreOut,
@@ -18,6 +19,15 @@ from app.schemas import (
 router = APIRouter(tags=["référentiel"])
 
 AdminOnly = Depends(require_roles("admin"))
+
+
+@router.get("/ecole", response_model=EcoleOut)
+def mon_ecole(user: CurrentUser, db: DbSession):
+    """L'école de l'utilisateur connecté."""
+    ecole = db.get(Ecole, user.ecole_id)
+    if ecole is None:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="École introuvable.")
+    return ecole
 
 
 @router.get("/niveaux", response_model=list[NiveauOut])

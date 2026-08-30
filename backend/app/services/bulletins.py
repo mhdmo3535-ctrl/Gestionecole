@@ -184,3 +184,40 @@ def construire_bulletins_classe(
         eleves=bulletins,
         effectif=effectif,
     )
+
+
+def progression_eleve(db: Session, *, eleve: Eleve) -> list[tuple[Trimestre, Decimal | None]]:
+    """Moyenne générale de l'élève pour chaque trimestre de son année scolaire.
+
+    Sert à tracer la courbe de progression. Renvoie une liste
+    ordonnée par numéro de trimestre : (trimestre, moyenne ou None).
+    """
+    classe = db.get(Classe, eleve.classe_id) if eleve.classe_id else None
+    if classe is None:
+        return []
+
+    paires = matieres_de_la_classe(
+        db, ecole_id=classe.ecole_id, niveau_id=classe.niveau_id, serie_id=classe.serie_id
+    )
+    matieres = {
+        m.id: m
+        for m in db.scalars(
+            select(Matiere).where(Matiere.id.in_([mid for mid, _ in paires] or [-1]))
+        )
+    }
+    trimestres = list(
+        db.scalars(
+            select(Trimestre)
+            .where(Trimestre.annee_scolaire_id == classe.annee_scolaire_id)
+            .order_by(Trimestre.numero)
+        )
+    )
+
+    resultats: list[tuple[Trimestre, Decimal | None]] = []
+    for t in trimestres:
+        par_eleve = _resultats_du_trimestre(
+            db, eleve_ids=[eleve.id], paires=paires, matieres=matieres, trimestre_id=t.id
+        )
+        moy = moyenne_generale([lc.resultat for lc in par_eleve[eleve.id]])
+        resultats.append((t, moy))
+    return resultats
