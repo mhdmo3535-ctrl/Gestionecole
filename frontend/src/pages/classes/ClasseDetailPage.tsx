@@ -7,6 +7,7 @@ import { getClasse, getElevesDeLaClasse, getMatieresDeLaClasse } from "../../api
 import type { ClasseMatiere, Eleve } from "../../api/types";
 import { useAuth } from "../../auth/AuthContext";
 import { ClasseFormModal } from "./ClasseFormModal";
+import { HistoriqueNotesTab } from "./HistoriqueNotesTab";
 
 export function ClasseDetailPage() {
   const { id } = useParams();
@@ -77,6 +78,9 @@ export function ClasseDetailPage() {
             <Tag>{classe.niveau_nom}</Tag>
             {classe.serie_nom && <Tag color="geekblue">Série {classe.serie_nom}</Tag>}
             <Typography.Text type="secondary">Année {classe.annee_libelle}</Typography.Text>
+            <Typography.Text type="secondary">
+              Professeur principal : {classe.professeur_principal_nom ?? <em>non désigné</em>}
+            </Typography.Text>
           </Space>
         }
         extra={estAdmin && <Button onClick={() => setEditionOuverte(true)}>Modifier</Button>}
@@ -141,6 +145,17 @@ export function ClasseDetailPage() {
                 />
               ),
             },
+            ...(estAdmin
+              ? [
+                  {
+                    key: "historique",
+                    label: "Historique des notes",
+                    children: (
+                      <HistoriqueNotesTab classeId={classe.id} anneeScolaireId={classe.annee_scolaire_id} />
+                    ),
+                  },
+                ]
+              : []),
           ]}
         />
       </Card>

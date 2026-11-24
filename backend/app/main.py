@@ -11,6 +11,7 @@ from app.routers import (
     eleves,
     matieres,
     notes,
+    paiements,
     referentiel,
     utilisateurs,
     vie_scolaire,
@@ -35,6 +36,7 @@ app.include_router(eleves.router)
 app.include_router(notes.router)
 app.include_router(bulletins.router)
 app.include_router(vie_scolaire.router)
+app.include_router(paiements.router)
 
 
 @app.get("/health", tags=["health"])

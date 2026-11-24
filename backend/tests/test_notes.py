@@ -1,4 +1,4 @@
-"""Saisie et validation des notes, résolveur de coefficient, trimestres."""
+"""Saisie des notes (enseignants uniquement, historique), résolveur de coefficient, trimestres."""
 
 import pytest
 
@@ -33,12 +33,20 @@ def scenario(client, auth_headers, niveau_tle, serie_d):
         f"/utilisateurs/{prof['id']}/affectations", headers=auth_headers,
         json={"classe_id": classe["id"], "matiere_id": maths},
     )
+    pp = client.post(
+        "/utilisateurs", headers=auth_headers,
+        json={"nom": "P", "prenom": "P", "email": "prof.principal@ecole.bj",
+              "mot_de_passe": "motdepasse123", "role": "enseignant"},
+    ).json()
+    client.patch(f"/classes/{classe['id']}", headers=auth_headers,
+                 json={"professeur_principal_id": pp["id"]})
     trimestres = client.get("/trimestres", headers=auth_headers).json()
     t1 = next(t["id"] for t in trimestres if t["numero"] == 1)
     return {
         "classe_id": classe["id"],
         "eleve_id": eleve["id"],
         "prof_headers": _login(client, "prof.maths@ecole.bj"),
+        "pp_headers": _login(client, "prof.principal@ecole.bj"),
         "maths_id": maths,
         "francais_id": _mid(client, auth_headers, "Français"),
         "conduite_id": _mid(client, auth_headers, "Conduite"),
@@ -97,7 +105,6 @@ def test_prof_saisit_une_note_complete(client, scenario):
     body = res.json()
     assert body["statut"] == "calculee"
     assert body["moyenne"] == 12.0   # (12 + 15 + 9) / 3
-    assert body["valide"] is False
 
 
 def test_note_incomplete(client, scenario):
@@ -140,12 +147,12 @@ def test_note_hors_bareme_refusee(client, scenario):
     assert res.status_code == 422
 
 
-# ---------- Conduite (administration) ----------
+# ---------- Conduite (professeur principal) ----------
 
-def test_admin_saisit_la_conduite(client, auth_headers, scenario):
+def test_professeur_principal_saisit_la_conduite(client, scenario):
     s = scenario
     body = client.put(
-        "/notes", headers=auth_headers,
+        "/notes", headers=s["pp_headers"],
         json={"eleve_id": s["eleve_id"], "matiere_id": s["conduite_id"],
               "trimestre_id": s["trimestre_id"], "note_directe": 13.5, "appreciation": "Correct"},
     ).json()
@@ -153,24 +160,98 @@ def test_admin_saisit_la_conduite(client, auth_headers, scenario):
     assert body["appreciation"] == "Correct"
 
 
-def test_conduite_refuse_les_interros(client, auth_headers, scenario):
+def test_conduite_refuse_les_interros(client, scenario):
     s = scenario
     res = client.put(
-        "/notes", headers=auth_headers,
+        "/notes", headers=s["pp_headers"],
         json={"eleve_id": s["eleve_id"], "matiere_id": s["conduite_id"],
               "trimestre_id": s["trimestre_id"], "interro1": 10},
     )
     assert res.status_code == 422
 
 
-def test_matiere_normale_refuse_note_directe(client, auth_headers, scenario):
+def test_matiere_normale_refuse_note_directe(client, scenario):
     s = scenario
     res = client.put(
-        "/notes", headers=auth_headers,
+        "/notes", headers=s["prof_headers"],
         json={"eleve_id": s["eleve_id"], "matiere_id": s["maths_id"],
               "trimestre_id": s["trimestre_id"], "note_directe": 12},
     )
     assert res.status_code == 422
+
+
+def test_professeur_principal_ne_saisit_pas_les_autres_matieres(client, scenario):
+    s = scenario
+    res = client.put(
+        "/notes", headers=s["pp_headers"],
+        json={"eleve_id": s["eleve_id"], "matiere_id": s["maths_id"], "trimestre_id": s["trimestre_id"],
+              "interro1": 10, "interro2": 10, "interro3": 10, "devoir1": 10, "devoir2": 10},
+    )
+    assert res.status_code == 403
+
+
+# ---------- Anti-fraude : l'administration ne touche pas aux notes ----------
+
+def _note_maths(client, s, valeur=10):
+    return client.put(
+        "/notes", headers=s["prof_headers"],
+        json={"eleve_id": s["eleve_id"], "matiere_id": s["maths_id"], "trimestre_id": s["trimestre_id"],
+              "interro1": valeur, "interro2": valeur, "interro3": valeur, "devoir1": valeur, "devoir2": valeur},
+    )
+
+
+def test_admin_ne_peut_pas_saisir_une_note(client, auth_headers, scenario):
+    s = scenario
+    for matiere, corps in (
+        (s["maths_id"], {"interro1": 18}),
+        (s["conduite_id"], {"note_directe": 18}),
+    ):
+        res = client.put("/notes", headers=auth_headers, json={
+            "eleve_id": s["eleve_id"], "matiere_id": matiere, "trimestre_id": s["trimestre_id"], **corps})
+        assert res.status_code == 403
+
+
+def test_admin_ne_peut_ni_modifier_ni_supprimer_une_note(client, auth_headers, scenario):
+    s = scenario
+    note = _note_maths(client, s, 9).json()
+    res = client.put("/notes", headers=auth_headers, json={
+        "eleve_id": s["eleve_id"], "matiere_id": s["maths_id"], "trimestre_id": s["trimestre_id"],
+        "interro1": 18, "interro2": 18, "interro3": 18, "devoir1": 18, "devoir2": 18})
+    assert res.status_code == 403
+    assert client.delete(f"/notes/{note['id']}", headers=auth_headers).status_code == 403
+    # la note est intacte
+    assert client.get(f"/notes/{note['id']}", headers=auth_headers).json()["moyenne"] == 9.0
+
+
+# ---------- Historique ----------
+
+def test_historique_trace_creation_modification_suppression(client, auth_headers, scenario):
+    s = scenario
+    note = _note_maths(client, s, 8).json()
+    _note_maths(client, s, 12)
+    assert client.delete(f"/notes/{note['id']}", headers=s["prof_headers"]).status_code == 204
+
+    h = client.get("/notes/historique", headers=auth_headers, params={"eleve_id": s["eleve_id"]}).json()
+    assert [e["action"] for e in h] == ["suppression", "modification", "creation"]   # plus récent d'abord
+    modif = h[1]
+    assert modif["anciennes_valeurs"]["devoir1"] == 8.0
+    assert modif["nouvelles_valeurs"]["devoir1"] == 12.0
+    assert modif["auteur_nom"] == "M P"
+    assert modif["matiere_nom"] == "Mathématiques"
+    assert h[0]["nouvelles_valeurs"] is None and h[0]["anciennes_valeurs"]["devoir1"] == 12.0
+
+
+def test_reenregistrer_sans_changement_ne_trace_rien(client, auth_headers, scenario):
+    s = scenario
+    _note_maths(client, s, 10)
+    _note_maths(client, s, 10)
+    h = client.get("/notes/historique", headers=auth_headers, params={"eleve_id": s["eleve_id"]}).json()
+    assert [e["action"] for e in h] == ["creation"]
+
+
+def test_historique_reserve_a_l_administration(client, scenario):
+    s = scenario
+    assert client.get("/notes/historique", headers=s["prof_headers"]).status_code == 403
 
 
 # ---------- Consultation ----------
@@ -180,7 +261,7 @@ def test_prof_ne_voit_que_ses_matieres_dans_la_grille(client, auth_headers, scen
     client.put("/notes", headers=s["prof_headers"],
                json={"eleve_id": s["eleve_id"], "matiere_id": s["maths_id"], "trimestre_id": s["trimestre_id"],
                      "interro1": 10, "interro2": 10, "interro3": 10, "devoir1": 10, "devoir2": 10})
-    client.put("/notes", headers=auth_headers,
+    client.put("/notes", headers=s["pp_headers"],
                json={"eleve_id": s["eleve_id"], "matiere_id": s["conduite_id"], "trimestre_id": s["trimestre_id"],
                      "note_directe": 12})
 
@@ -190,46 +271,9 @@ def test_prof_ne_voit_que_ses_matieres_dans_la_grille(client, auth_headers, scen
     vue_prof = client.get("/notes", headers=s["prof_headers"],
                           params={"classe_id": s["classe_id"], "trimestre_id": s["trimestre_id"]}).json()
     assert {n["matiere_id"] for n in vue_prof} == {s["maths_id"]}
-
-
-# ---------- Validation ----------
-
-def test_validation_verrouille_pour_le_prof_mais_pas_pour_l_admin(client, auth_headers, scenario):
-    s = scenario
-    note = client.put(
-        "/notes", headers=s["prof_headers"],
-        json={"eleve_id": s["eleve_id"], "matiere_id": s["maths_id"], "trimestre_id": s["trimestre_id"],
-              "interro1": 11, "interro2": 11, "interro3": 11, "devoir1": 11, "devoir2": 11},
-    ).json()
-
-    v = client.post(f"/notes/{note['id']}/validation", headers=auth_headers, json={"valide": True}).json()
-    assert v["valide"] is True
-
-    # le prof ne peut plus modifier
-    bloc = client.put(
-        "/notes", headers=s["prof_headers"],
-        json={"eleve_id": s["eleve_id"], "matiere_id": s["maths_id"], "trimestre_id": s["trimestre_id"],
-              "interro1": 20},
-    )
-    assert bloc.status_code == 409
-
-    # l'admin peut, et cela remet la validation à zéro
-    maj = client.put(
-        "/notes", headers=auth_headers,
-        json={"eleve_id": s["eleve_id"], "matiere_id": s["maths_id"], "trimestre_id": s["trimestre_id"],
-              "interro1": 13, "interro2": 13, "interro3": 13, "devoir1": 13, "devoir2": 13},
-    ).json()
-    assert maj["valide"] is False
-
-
-def test_prof_ne_peut_pas_valider(client, scenario):
-    s = scenario
-    note = client.put(
-        "/notes", headers=s["prof_headers"],
-        json={"eleve_id": s["eleve_id"], "matiere_id": s["maths_id"], "trimestre_id": s["trimestre_id"],
-              "interro1": 10, "interro2": 10, "interro3": 10, "devoir1": 10, "devoir2": 10},
-    ).json()
-    assert client.post(f"/notes/{note['id']}/validation", headers=s["prof_headers"], json={"valide": True}).status_code == 403
+    vue_pp = client.get("/notes", headers=s["pp_headers"],
+                        params={"classe_id": s["classe_id"], "trimestre_id": s["trimestre_id"]}).json()
+    assert {n["matiere_id"] for n in vue_pp} == {s["conduite_id"]}
 
 
 # ---------- Isolation entre écoles ----------

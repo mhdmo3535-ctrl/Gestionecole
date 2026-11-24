@@ -8,18 +8,21 @@ def _login(client, email, mdp="motdepasse123"):
     return {"Authorization": f"Bearer {tok}"}
 
 
-def _saisir_tout(client, headers, classe_id, eleve_id, trimestre_id, valeur):
-    """Met la même valeur partout : la moyenne générale vaut alors exactement `valeur`."""
+def _saisir_tout(client, headers, db, classe_id, eleve_id, trimestre_id, valeur):
+    """Met la même valeur partout : la moyenne générale vaut alors exactement `valeur`.
+
+    Les notes sont écrites directement en base : l'administration n'a pas le
+    droit de les saisir via l'API (seuls les enseignants le peuvent).
+    """
+    from app.models import Note
+
     for m in client.get(f"/classes/{classe_id}/matieres", headers=headers).json():
         if m["note_directe"]:
-            body = {"eleve_id": eleve_id, "matiere_id": m["matiere_id"],
-                    "trimestre_id": trimestre_id, "note_directe": valeur}
+            champs = {"note_directe": valeur}
         else:
-            body = {"eleve_id": eleve_id, "matiere_id": m["matiere_id"], "trimestre_id": trimestre_id,
-                    "interro1": valeur, "interro2": valeur, "interro3": valeur,
-                    "devoir1": valeur, "devoir2": valeur}
-        r = client.put("/notes", headers=headers, json=body)
-        assert r.status_code == 200, r.text
+            champs = {c: valeur for c in ("interro1", "interro2", "interro3", "devoir1", "devoir2")}
+        db.add(Note(eleve_id=eleve_id, matiere_id=m["matiere_id"], trimestre_id=trimestre_id, **champs))
+    db.flush()
 
 
 @pytest.fixture
@@ -36,11 +39,11 @@ def classe_tle_d(client, auth_headers, niveau_tle, serie_d):
     return {"classe_id": classe["id"], "a": a["id"], "b": b["id"], "trimestres": trimestres}
 
 
-def test_bulletin_classe_moyennes_et_rang(client, auth_headers, classe_tle_d):
+def test_bulletin_classe_moyennes_et_rang(client, auth_headers, db, classe_tle_d):
     s = classe_tle_d
     t1 = s["trimestres"][1]
-    _saisir_tout(client, auth_headers, s["classe_id"], s["a"], t1, 14)
-    _saisir_tout(client, auth_headers, s["classe_id"], s["b"], t1, 11)
+    _saisir_tout(client, auth_headers, db, s["classe_id"], s["a"], t1, 14)
+    _saisir_tout(client, auth_headers, db, s["classe_id"], s["b"], t1, 11)
 
     res = client.get(f"/classes/{s['classe_id']}/bulletins", headers=auth_headers, params={"trimestre_id": t1})
     assert res.status_code == 200, res.text
@@ -55,11 +58,11 @@ def test_bulletin_classe_moyennes_et_rang(client, auth_headers, classe_tle_d):
     assert par_eleve[s["a"]]["decision"] is None
 
 
-def test_bulletin_eleve_detail_par_matiere(client, auth_headers, classe_tle_d):
+def test_bulletin_eleve_detail_par_matiere(client, auth_headers, db, classe_tle_d):
     s = classe_tle_d
     t1 = s["trimestres"][1]
-    _saisir_tout(client, auth_headers, s["classe_id"], s["a"], t1, 14)
-    _saisir_tout(client, auth_headers, s["classe_id"], s["b"], t1, 11)
+    _saisir_tout(client, auth_headers, db, s["classe_id"], s["a"], t1, 14)
+    _saisir_tout(client, auth_headers, db, s["classe_id"], s["b"], t1, 11)
 
     b = client.get(f"/eleves/{s['a']}/bulletin", headers=auth_headers, params={"trimestre_id": t1}).json()
     assert b["moyenne_generale"] == 14.0
@@ -75,11 +78,11 @@ def test_bulletin_eleve_detail_par_matiere(client, auth_headers, classe_tle_d):
     assert conduite["note_directe"] is True and conduite["statut"] == "directe"
 
 
-def test_decision_apparait_quand_les_trois_trimestres_sont_complets(client, auth_headers, classe_tle_d):
+def test_decision_apparait_quand_les_trois_trimestres_sont_complets(client, auth_headers, db, classe_tle_d):
     s = classe_tle_d
     for numero in (1, 2, 3):
-        _saisir_tout(client, auth_headers, s["classe_id"], s["a"], s["trimestres"][numero], 14)
-        _saisir_tout(client, auth_headers, s["classe_id"], s["b"], s["trimestres"][numero], 8)
+        _saisir_tout(client, auth_headers, db, s["classe_id"], s["a"], s["trimestres"][numero], 14)
+        _saisir_tout(client, auth_headers, db, s["classe_id"], s["b"], s["trimestres"][numero], 8)
 
     t3 = s["trimestres"][3]
     ba = client.get(f"/eleves/{s['a']}/bulletin", headers=auth_headers, params={"trimestre_id": t3}).json()
@@ -107,16 +110,17 @@ def test_eleve_sans_classe_pas_de_bulletin(client, auth_headers, classe_tle_d):
     assert res.status_code == 422
 
 
-def test_matiere_sans_note_est_exclue_de_la_moyenne(client, auth_headers, classe_tle_d):
+def test_matiere_sans_note_est_exclue_de_la_moyenne(client, auth_headers, db, classe_tle_d):
     """Une matière sans note ne compte ni au numérateur ni au dénominateur."""
     s = classe_tle_d
     t1 = s["trimestres"][1]
     matieres = client.get(f"/classes/{s['classe_id']}/matieres", headers=auth_headers).json()
     # on ne note que Mathématiques (coef 4) à 12
     maths = next(m["matiere_id"] for m in matieres if m["nom"] == "Mathématiques")
-    client.put("/notes", headers=auth_headers, json={
-        "eleve_id": s["a"], "matiere_id": maths, "trimestre_id": t1,
-        "interro1": 12, "interro2": 12, "interro3": 12, "devoir1": 12, "devoir2": 12})
+    from app.models import Note
+    db.add(Note(eleve_id=s["a"], matiere_id=maths, trimestre_id=t1,
+                interro1=12, interro2=12, interro3=12, devoir1=12, devoir2=12))
+    db.flush()
 
     b = client.get(f"/eleves/{s['a']}/bulletin", headers=auth_headers, params={"trimestre_id": t1}).json()
     assert b["moyenne_generale"] == 12.0     # seule Maths compte

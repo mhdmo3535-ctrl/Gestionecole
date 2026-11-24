@@ -4,7 +4,6 @@ import {
   Button,
   Card,
   Descriptions,
-  Empty,
   Result,
   Skeleton,
   Space,
@@ -14,13 +13,14 @@ import {
 } from "antd";
 import dayjs from "dayjs";
 import { useState } from "react";
-import { useNavigate, useParams } from "react-router-dom";
+import { useNavigate, useParams, useSearchParams } from "react-router-dom";
 import { getClasse, getEleve } from "../../api/endpoints";
 import type { Eleve } from "../../api/types";
 import { useAuth } from "../../auth/AuthContext";
 import { EleveFormModal } from "./EleveFormModal";
 import { EleveMedicalTab } from "./EleveMedicalTab";
 import { EleveParentsTab } from "./EleveParentsTab";
+import { ElevePaiementsTab } from "./ElevePaiementsTab";
 import { EleveScolariteTab } from "./EleveScolariteTab";
 import { EleveVieScolaireTab } from "./EleveVieScolaireTab";
 
@@ -30,19 +30,11 @@ const STATUT_LIBELLE: Record<Eleve["statut"], { texte: string; couleur: string }
   archive: { texte: "Archivé", couleur: "default" },
 };
 
-function AVenir({ quoi }: { quoi: string }) {
-  return (
-    <Empty
-      image={Empty.PRESENTED_IMAGE_SIMPLE}
-      description={`${quoi} — écran à construire dans une prochaine étape.`}
-    />
-  );
-}
-
 export function EleveDossierPage() {
   const { id } = useParams();
   const eleveId = Number(id);
   const navigate = useNavigate();
+  const [searchParams] = useSearchParams();
   const { utilisateur } = useAuth();
   const estAdmin = utilisateur?.role === "admin";
   const [editionOuverte, setEditionOuverte] = useState(false);
@@ -111,7 +103,7 @@ export function EleveDossierPage() {
         }
       >
         <Tabs
-          defaultActiveKey="identite"
+          defaultActiveKey={searchParams.get("onglet") ?? "identite"}
           items={[
             {
               key: "identite",
@@ -172,7 +164,7 @@ export function EleveDossierPage() {
             {
               key: "paiements",
               label: "Paiements",
-              children: <AVenir quoi="Suivi des tranches et reçus" />,
+              children: <ElevePaiementsTab eleveId={eleve.id} />,
             },
           ]}
         />

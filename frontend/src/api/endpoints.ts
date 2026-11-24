@@ -14,9 +14,16 @@ import type {
   InfosMedicales,
   LienParent,
   Matiere,
+  ModePaiement,
+  Paiement,
+  Recu,
+  SituationPaiements,
+  SuiviPaiements,
+  Tranche,
   Niveau,
   ParentTuteur,
   Note,
+  NoteHistorique,
   Permission,
   ProgressionEleve,
   Serie,
@@ -140,6 +147,7 @@ export interface ClassePayload {
   niveau_id: number;
   serie_id?: number | null;
   annee_scolaire_id?: number | null;
+  professeur_principal_id?: number | null;
 }
 
 export const getClasses = (params?: { annee_scolaire_id?: number; niveau_id?: number }) =>
@@ -235,9 +243,13 @@ export const getNotes = (params: {
 }) => api.get<Note[]>("/notes", { params }).then((r) => r.data);
 export const enregistrerNote = (payload: NotePayload) =>
   api.put<Note>("/notes", payload).then((r) => r.data);
-export const validerNote = (noteId: number, valide: boolean) =>
-  api.post<Note>(`/notes/${noteId}/validation`, { valide }).then((r) => r.data);
 export const supprimerNote = (noteId: number) => api.delete(`/notes/${noteId}`);
+export const getHistoriqueNotes = (params: {
+  classe_id?: number;
+  eleve_id?: number;
+  trimestre_id?: number;
+  matiere_id?: number;
+}) => api.get<NoteHistorique[]>("/notes/historique", { params }).then((r) => r.data);
 
 // ---------- Bulletins ----------
 
@@ -253,3 +265,35 @@ export const getBulletinEleve = (eleveId: number, trimestreId: number) =>
     .then((r) => r.data);
 export const getProgressionEleve = (eleveId: number) =>
   api.get<ProgressionEleve>(`/eleves/${eleveId}/progression`).then((r) => r.data);
+
+// ---------- Paiements ----------
+
+export interface TranchePayload {
+  libelle?: string | null;
+  montant: number;
+  date_limite?: string | null;
+  annee_scolaire_id?: number;
+}
+
+export const getTranches = (anneeScolaireId?: number) =>
+  api
+    .get<Tranche[]>("/paiements/tranches", { params: { annee_scolaire_id: anneeScolaireId } })
+    .then((r) => r.data);
+export const creerTranche = (payload: TranchePayload) =>
+  api.post<Tranche>("/paiements/tranches", payload).then((r) => r.data);
+export const modifierTranche = (id: number, payload: Partial<TranchePayload>) =>
+  api.patch<Tranche>(`/paiements/tranches/${id}`, payload).then((r) => r.data);
+export const supprimerTranche = (id: number) => api.delete(`/paiements/tranches/${id}`);
+
+export const getSituationPaiements = (eleveId: number) =>
+  api.get<SituationPaiements>(`/eleves/${eleveId}/paiements`).then((r) => r.data);
+export const enregistrerPaiement = (
+  eleveId: number,
+  payload: { tranche_id: number; montant_paye: number; date_paiement?: string; mode_paiement: ModePaiement },
+) => api.post<Paiement>(`/eleves/${eleveId}/paiements`, payload).then((r) => r.data);
+export const annulerPaiement = (eleveId: number, paiementId: number) =>
+  api.delete(`/eleves/${eleveId}/paiements/${paiementId}`);
+export const getRecu = (paiementId: number) =>
+  api.get<Recu>(`/paiements/${paiementId}/recu`).then((r) => r.data);
+export const getSuiviPaiements = (params: { annee_scolaire_id?: number; classe_id?: number }) =>
+  api.get<SuiviPaiements>("/paiements/suivi", { params }).then((r) => r.data);

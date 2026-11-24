@@ -331,6 +331,7 @@ class ClasseCreate(BaseModel):
     niveau_id: int
     serie_id: int | None = None
     annee_scolaire_id: int | None = None   # défaut : année scolaire active
+    professeur_principal_id: int | None = None
 
 
 class ClasseUpdate(BaseModel):
@@ -338,6 +339,7 @@ class ClasseUpdate(BaseModel):
     niveau_id: int | None = None
     serie_id: int | None = None
     annee_scolaire_id: int | None = None
+    professeur_principal_id: int | None = None
 
 
 class ClasseOut(BaseModel):
@@ -352,6 +354,8 @@ class ClasseOut(BaseModel):
     annee_scolaire_id: int
     annee_libelle: str
     effectif: int
+    professeur_principal_id: int | None = None
+    professeur_principal_nom: str | None = None
 
 
 class ClasseMatiereOut(BaseModel):
@@ -381,10 +385,6 @@ class NoteEcrire(BaseModel):
     appreciation: str | None = None
 
 
-class NoteValidation(BaseModel):
-    valide: bool
-
-
 class NoteOut(BaseModel):
     model_config = ConfigDict(from_attributes=True)
 
@@ -400,11 +400,25 @@ class NoteOut(BaseModel):
     note_directe: float | None
     appreciation: str | None
     saisi_par: int | None
-    valide: bool
-    valide_par: int | None
     # calculé, non stocké :
     moyenne: float | None = None      # moyenne de la matière si exploitable
     statut: str = "sans_note"         # sans_note | incomplete | calculee | directe
+
+
+class NoteHistoriqueOut(BaseModel):
+    id: int
+    note_id: int | None
+    eleve_id: int
+    eleve_nom: str
+    matiere_id: int
+    matiere_nom: str
+    trimestre_id: int
+    action: str                       # creation | modification | suppression
+    anciennes_valeurs: dict | None
+    nouvelles_valeurs: dict | None
+    auteur_id: int | None
+    auteur_nom: str | None
+    le: datetime
 
 
 # ---------- Bulletins ----------
@@ -475,3 +489,120 @@ class ProgressionEleve(BaseModel):
     classe_id: int
     classe_nom: str
     points: list[ProgressionPoint]
+
+
+# ---------- Paiements ----------
+
+MODES_PAIEMENT = "^(especes|mobile_money|virement|cheque)$"
+Montant = Annotated[float, Field(gt=0, le=99_999_999)]
+
+
+class TrancheCreate(BaseModel):
+    libelle: str | None = Field(default=None, max_length=50)
+    montant: Montant
+    date_limite: date | None = None
+    annee_scolaire_id: int | None = None   # défaut : année scolaire active
+
+
+class TrancheUpdate(BaseModel):
+    libelle: str | None = Field(default=None, max_length=50)
+    montant: Montant | None = None
+    date_limite: date | None = None
+
+
+class TrancheOut(BaseModel):
+    id: int
+    annee_scolaire_id: int
+    numero: int
+    libelle: str
+    montant: float
+    date_limite: date | None
+    nb_paiements: int = 0
+
+
+class PaiementCreate(BaseModel):
+    tranche_id: int
+    montant_paye: Montant
+    date_paiement: date | None = None       # défaut : aujourd'hui
+    mode_paiement: str = Field(default="especes", pattern=MODES_PAIEMENT)
+
+
+class PaiementOut(BaseModel):
+    id: int
+    eleve_id: int
+    tranche_id: int
+    tranche_libelle: str
+    montant_paye: float
+    date_paiement: date
+    mode_paiement: str | None
+    numero_recu: str | None
+    enregistre_par_nom: str | None
+    created_at: datetime
+
+
+class SituationTranche(BaseModel):
+    tranche_id: int
+    numero: int
+    libelle: str
+    montant: float
+    date_limite: date | None
+    paye: float
+    reste: float
+    statut: str          # solde | partiel | non_paye | en_retard
+
+
+class SituationEleve(BaseModel):
+    eleve_id: int
+    annee_scolaire_id: int | None
+    annee_libelle: str | None
+    total_du: float
+    total_paye: float
+    reste: float
+    statut: str          # solde | partiel | non_paye | en_retard | aucune_tranche
+    tranches: list[SituationTranche]
+    paiements: list[PaiementOut]
+
+
+class RecuOut(BaseModel):
+    paiement: PaiementOut
+    ecole_nom: str
+    ecole_sigle: str | None
+    ecole_adresse: str | None
+    ecole_telephone: str | None
+    annee_libelle: str
+    eleve_matricule: str
+    eleve_nom: str
+    eleve_prenom: str
+    classe_nom: str | None
+    tranche_montant: float
+    tranche_reste_apres: float
+    total_du: float
+    total_paye_a_date: float
+    reste_global: float
+
+
+class SuiviLigne(BaseModel):
+    eleve_id: int
+    matricule: str
+    nom: str
+    prenom: str
+    classe_id: int
+    classe_nom: str
+    total_du: float
+    total_paye: float
+    reste: float
+    statut: str
+    dernier_paiement: date | None
+
+
+class SuiviPaiements(BaseModel):
+    annee_scolaire_id: int
+    annee_libelle: str
+    nb_tranches: int
+    total_attendu: float
+    total_encaisse: float
+    reste: float
+    nb_eleves: int
+    nb_soldes: int
+    nb_en_retard: int
+    lignes: list[SuiviLigne]

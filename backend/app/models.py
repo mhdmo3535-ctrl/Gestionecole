@@ -2,13 +2,14 @@
 
 Couvre les tables utilisées par l'API (auth, élèves, classes, référentiel,
 coefficients, notes). Le schéma complet fait foi : backend/db/schema.sql.
-Les modules restants (absences, discipline, paiements...) seront ajoutés au
+Les modules restants seront ajoutés au
 fur et à mesure.
 """
 
 from datetime import date, datetime
 from decimal import Decimal
 
+from sqlalchemy.dialects.postgresql import JSONB
 from sqlalchemy import (
     Boolean,
     Date,
@@ -88,6 +89,10 @@ class Classe(Base):
     niveau_id: Mapped[int] = mapped_column(ForeignKey("niveaux.id"))
     serie_id: Mapped[int | None] = mapped_column(ForeignKey("series.id"))
     nom: Mapped[str] = mapped_column(String(50))
+    # enseignant qui saisit la note de conduite de la classe
+    professeur_principal_id: Mapped[int | None] = mapped_column(
+        ForeignKey("utilisateurs.id", ondelete="SET NULL")
+    )
 
     niveau: Mapped[Niveau] = relationship(lazy="joined")
     serie: Mapped[Serie | None] = relationship(lazy="joined")
@@ -255,11 +260,31 @@ class Note(Base):
     note_directe: Mapped[Decimal | None] = mapped_column(Numeric(4, 2))
     appreciation: Mapped[str | None] = mapped_column(String)
     saisi_par: Mapped[int | None] = mapped_column(ForeignKey("utilisateurs.id"))
-    valide: Mapped[bool] = mapped_column(Boolean, default=False)
-    valide_par: Mapped[int | None] = mapped_column(ForeignKey("utilisateurs.id"))
-    valide_le: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
     updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
+
+
+class NoteHistorique(Base):
+    """Journal des saisies de notes : création, modification, suppression.
+
+    Une note n'est modifiable que par l'enseignant concerné ; chaque
+    changement est tracé ici (anciennes et nouvelles valeurs, auteur, date)
+    pour que la direction puisse repérer une modification suspecte.
+    Les lignes survivent à la suppression de la note.
+    """
+
+    __tablename__ = "notes_historique"
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    note_id: Mapped[int | None] = mapped_column(ForeignKey("notes.id", ondelete="SET NULL"))
+    eleve_id: Mapped[int] = mapped_column(ForeignKey("eleves.id", ondelete="CASCADE"))
+    matiere_id: Mapped[int] = mapped_column(ForeignKey("matieres.id", ondelete="CASCADE"))
+    trimestre_id: Mapped[int] = mapped_column(ForeignKey("trimestres.id", ondelete="CASCADE"))
+    action: Mapped[str] = mapped_column(String(20))   # creation | modification | suppression
+    anciennes_valeurs: Mapped[dict | None] = mapped_column(JSONB)
+    nouvelles_valeurs: Mapped[dict | None] = mapped_column(JSONB)
+    auteur_id: Mapped[int | None] = mapped_column(ForeignKey("utilisateurs.id", ondelete="SET NULL"))
+    le: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
 
 
 class Eleve(Base):
@@ -280,3 +305,34 @@ class Eleve(Base):
     updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
 
     classe: Mapped[Classe | None] = relationship(lazy="joined")
+
+
+class TranchePaiement(Base):
+    __tablename__ = "tranches_paiement"
+    __table_args__ = (UniqueConstraint("ecole_id", "annee_scolaire_id", "numero"),)
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    ecole_id: Mapped[int] = mapped_column(ForeignKey("ecoles.id", ondelete="CASCADE"))
+    annee_scolaire_id: Mapped[int] = mapped_column(
+        ForeignKey("annees_scolaires.id", ondelete="CASCADE")
+    )
+    numero: Mapped[int] = mapped_column(SmallInteger)
+    libelle: Mapped[str | None] = mapped_column(String(50))
+    montant: Mapped[Decimal] = mapped_column(Numeric(10, 2))
+    date_limite: Mapped[date | None] = mapped_column(Date)
+
+
+class Paiement(Base):
+    __tablename__ = "paiements"
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    eleve_id: Mapped[int] = mapped_column(ForeignKey("eleves.id", ondelete="CASCADE"))
+    tranche_id: Mapped[int] = mapped_column(ForeignKey("tranches_paiement.id"))
+    montant_paye: Mapped[Decimal] = mapped_column(Numeric(10, 2))
+    date_paiement: Mapped[date] = mapped_column(Date, server_default=func.current_date())
+    mode_paiement: Mapped[str | None] = mapped_column(String(20))
+    numero_recu: Mapped[str | None] = mapped_column(String(50))
+    enregistre_par: Mapped[int | None] = mapped_column(ForeignKey("utilisateurs.id"))
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
+
+    tranche: Mapped[TranchePaiement] = relationship(lazy="joined")

@@ -11,6 +11,7 @@ import { EnseignantDetailPage } from "./pages/enseignants/EnseignantDetailPage";
 import { LoginPage } from "./pages/LoginPage";
 import { MatieresPage } from "./pages/MatieresPage";
 import { MatiereDetailPage } from "./pages/matieres/MatiereDetailPage";
+import { PaiementsPage } from "./pages/PaiementsPage";
 import { StubPage } from "./pages/StubPage";
 
 export const router = createBrowserRouter([
@@ -34,6 +35,7 @@ export const router = createBrowserRouter([
       { path: "enseignants/:id", element: <EnseignantDetailPage /> },
       { path: "notes", element: <StubPage titre="Saisie des notes" /> },
       { path: "bulletins", element: <BulletinsPage /> },
+      { path: "paiements", element: <PaiementsPage /> },
     ],
   },
   { path: "*", element: <Navigate to="/eleves" replace /> },

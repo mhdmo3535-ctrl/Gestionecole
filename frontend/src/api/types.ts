@@ -62,6 +62,8 @@ export interface Classe {
   annee_scolaire_id: number;
   annee_libelle: string;
   effectif: number;
+  professeur_principal_id: number | null;
+  professeur_principal_nom: string | null;
 }
 
 export interface ClasseMatiere {
@@ -178,8 +180,6 @@ export interface Note {
   note_directe: number | null;
   appreciation: string | null;
   saisi_par: number | null;
-  valide: boolean;
-  valide_par: number | null;
   moyenne: number | null;
   statut: NoteStatut;
 }
@@ -250,4 +250,121 @@ export interface ProgressionEleve {
   classe_id: number;
   classe_nom: string;
   points: ProgressionPoint[];
+}
+
+// ---------- Paiements ----------
+
+export type ModePaiement = "especes" | "mobile_money" | "virement" | "cheque";
+export type StatutTranche = "solde" | "partiel" | "non_paye" | "en_retard";
+export type StatutPaiementEleve = StatutTranche | "aucune_tranche";
+
+export interface Tranche {
+  id: number;
+  annee_scolaire_id: number;
+  numero: number;
+  libelle: string;
+  montant: number;
+  date_limite: string | null;
+  nb_paiements: number;
+}
+
+export interface Paiement {
+  id: number;
+  eleve_id: number;
+  tranche_id: number;
+  tranche_libelle: string;
+  montant_paye: number;
+  date_paiement: string;
+  mode_paiement: ModePaiement | null;
+  numero_recu: string | null;
+  enregistre_par_nom: string | null;
+  created_at: string;
+}
+
+export interface SituationTranche {
+  tranche_id: number;
+  numero: number;
+  libelle: string;
+  montant: number;
+  date_limite: string | null;
+  paye: number;
+  reste: number;
+  statut: StatutTranche;
+}
+
+export interface SituationPaiements {
+  eleve_id: number;
+  annee_scolaire_id: number | null;
+  annee_libelle: string | null;
+  total_du: number;
+  total_paye: number;
+  reste: number;
+  statut: StatutPaiementEleve;
+  tranches: SituationTranche[];
+  paiements: Paiement[];
+}
+
+export interface Recu {
+  paiement: Paiement;
+  ecole_nom: string;
+  ecole_sigle: string | null;
+  ecole_adresse: string | null;
+  ecole_telephone: string | null;
+  annee_libelle: string;
+  eleve_matricule: string;
+  eleve_nom: string;
+  eleve_prenom: string;
+  classe_nom: string | null;
+  tranche_montant: number;
+  tranche_reste_apres: number;
+  total_du: number;
+  total_paye_a_date: number;
+  reste_global: number;
+}
+
+export interface SuiviLigne {
+  eleve_id: number;
+  matricule: string;
+  nom: string;
+  prenom: string;
+  classe_id: number;
+  classe_nom: string;
+  total_du: number;
+  total_paye: number;
+  reste: number;
+  statut: StatutPaiementEleve;
+  dernier_paiement: string | null;
+}
+
+export interface SuiviPaiements {
+  annee_scolaire_id: number;
+  annee_libelle: string;
+  nb_tranches: number;
+  total_attendu: number;
+  total_encaisse: number;
+  reste: number;
+  nb_eleves: number;
+  nb_soldes: number;
+  nb_en_retard: number;
+  lignes: SuiviLigne[];
+}
+
+export type ValeursNote = Partial<
+  Record<"interro1" | "interro2" | "interro3" | "devoir1" | "devoir2" | "note_directe", number | null>
+> & { appreciation?: string | null };
+
+export interface NoteHistorique {
+  id: number;
+  note_id: number | null;
+  eleve_id: number;
+  eleve_nom: string;
+  matiere_id: number;
+  matiere_nom: string;
+  trimestre_id: number;
+  action: "creation" | "modification" | "suppression";
+  anciennes_valeurs: ValeursNote | null;
+  nouvelles_valeurs: ValeursNote | null;
+  auteur_id: number | null;
+  auteur_nom: string | null;
+  le: string;
 }

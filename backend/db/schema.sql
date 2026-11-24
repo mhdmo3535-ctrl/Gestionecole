@@ -142,6 +142,7 @@ CREATE TABLE classes (
     niveau_id           BIGINT NOT NULL REFERENCES niveaux(id),
     serie_id            BIGINT REFERENCES series(id),   -- NULL pour le collège (6e-3e)
     nom                 VARCHAR(50) NOT NULL,            -- ex: '3e A', 'Terminale C'
+    professeur_principal_id BIGINT REFERENCES utilisateurs(id) ON DELETE SET NULL, -- saisit la conduite
     UNIQUE (ecole_id, annee_scolaire_id, nom)
 );
 
@@ -310,9 +311,6 @@ CREATE TABLE notes (
     note_directe    NUMERIC(4,2) CHECK (note_directe BETWEEN 0 AND 20),
     appreciation    TEXT,
     saisi_par       BIGINT REFERENCES utilisateurs(id),      -- enseignant (ou administration pour la conduite)
-    valide          BOOLEAN NOT NULL DEFAULT false,           -- validation admin
-    valide_par      BIGINT REFERENCES utilisateurs(id),
-    valide_le       TIMESTAMPTZ,
     created_at      TIMESTAMPTZ NOT NULL DEFAULT now(),
     updated_at      TIMESTAMPTZ NOT NULL DEFAULT now(),
     UNIQUE (eleve_id, matiere_id, trimestre_id),
@@ -327,6 +325,22 @@ CREATE TABLE notes (
 CREATE TRIGGER trg_notes_updated_at
     BEFORE UPDATE ON notes
     FOR EACH ROW EXECUTE FUNCTION set_updated_at();
+
+-- Journal anti-fraude : aucune note n'est modifiée sans laisser de trace.
+-- Seul l'enseignant concerné peut saisir/modifier ; l'administration consulte.
+CREATE TABLE notes_historique (
+    id                  BIGSERIAL PRIMARY KEY,
+    note_id             BIGINT REFERENCES notes(id) ON DELETE SET NULL,
+    eleve_id            BIGINT NOT NULL REFERENCES eleves(id) ON DELETE CASCADE,
+    matiere_id          BIGINT NOT NULL REFERENCES matieres(id) ON DELETE CASCADE,
+    trimestre_id        BIGINT NOT NULL REFERENCES trimestres(id) ON DELETE CASCADE,
+    action              VARCHAR(20) NOT NULL CHECK (action IN ('creation', 'modification', 'suppression')),
+    anciennes_valeurs   JSONB,
+    nouvelles_valeurs   JSONB,
+    auteur_id           BIGINT REFERENCES utilisateurs(id) ON DELETE SET NULL,
+    le                  TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+CREATE INDEX idx_notes_historique_eleve ON notes_historique (eleve_id, trimestre_id);
 
 CREATE INDEX idx_notes_eleve ON notes(eleve_id);
 CREATE INDEX idx_notes_trimestre ON notes(trimestre_id);

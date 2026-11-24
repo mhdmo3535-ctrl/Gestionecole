@@ -1,20 +1,21 @@
-"""Saisie et validation des notes.
+"""Saisie des notes — règles anti-fraude.
 
-- Enseignant : saisit les 3 interros + 2 devoirs pour les classes/matières
-  qui lui sont affectées. Ne peut pas toucher une note validée.
-- Administration : saisit toutes les notes de son école, saisit la note de
-  conduite (matière « note directe »), et valide / dévalide les notes.
-
-Toute modification du contenu d'une note remet sa validation à zéro : il
-faut la revalider explicitement.
+- Seuls les enseignants saisissent les notes :
+  * 3 interros + 2 devoirs pour les classes/matières qui leur sont affectées ;
+  * la note de conduite (matière « note directe ») par le professeur
+    principal de la classe.
+- L'administration ne peut ni saisir, ni modifier, ni supprimer une note.
+  Elle consulte les notes et leur historique.
+- L'enseignant peut corriger ses propres notes, mais chaque création,
+  modification ou suppression est journalisée dans ``notes_historique``
+  (anciennes / nouvelles valeurs, auteur, date).
 """
 
-from datetime import datetime, timezone
 from typing import Annotated
 
 from fastapi import APIRouter, Depends, HTTPException, Query, status
 from sqlalchemy import select
-from sqlalchemy.orm import Session
+from sqlalchemy.orm import Session, aliased
 
 from app.calcul import arrondi_affichage, evaluer_matiere
 from app.core.deps import CurrentUser, DbSession, require_roles
@@ -25,15 +26,17 @@ from app.models import (
     EnseignantAffectation,
     Matiere,
     Note,
+    NoteHistorique,
     Trimestre,
     Utilisateur,
 )
-from app.schemas import NoteEcrire, NoteOut, NoteValidation
+from app.schemas import NoteEcrire, NoteHistoriqueOut, NoteOut
 
 router = APIRouter(prefix="/notes", tags=["notes"])
 
 AdminOnly = Depends(require_roles("admin"))
 CHAMPS_EVAL = ("interro1", "interro2", "interro3", "devoir1", "devoir2")
+CHAMPS_NOTE = (*CHAMPS_EVAL, "note_directe", "appreciation")
 
 
 def _eleve_de_lecole(db: Session, eleve_id: int, ecole_id: int) -> Eleve:
@@ -70,14 +73,43 @@ def _a_une_affectation(db: Session, enseignant_id: int, classe_id: int | None, m
     ) is not None
 
 
+def _est_professeur_principal(db: Session, user_id: int, classe_id: int | None) -> bool:
+    if classe_id is None:
+        return False
+    classe = db.get(Classe, classe_id)
+    return classe is not None and classe.professeur_principal_id == user_id
+
+
 def _peut_saisir(db: Session, user: Utilisateur, eleve: Eleve, matiere: Matiere) -> bool:
-    if user.role == "admin":
-        return True
-    if matiere.note_directe:
-        return False   # la conduite est saisie par l'administration
+    """Seul l'enseignant concerné saisit : jamais l'administration."""
     if user.role != "enseignant":
         return False
+    if matiere.note_directe:
+        return _est_professeur_principal(db, user.id, eleve.classe_id)
     return _a_une_affectation(db, user.id, eleve.classe_id, matiere.id)
+
+
+def _peut_consulter(db: Session, user: Utilisateur, eleve: Eleve, matiere: Matiere) -> bool:
+    return user.role == "admin" or _peut_saisir(db, user, eleve, matiere)
+
+
+def _valeurs(note: Note) -> dict:
+    return {c: (float(v) if c != "appreciation" and v is not None else v)
+            for c in CHAMPS_NOTE for v in [getattr(note, c)]}
+
+
+def _journaliser(db: Session, note: Note, action: str, avant: dict | None, apres: dict | None,
+                 auteur_id: int) -> None:
+    db.add(NoteHistorique(
+        note_id=note.id if action != "suppression" else None,
+        eleve_id=note.eleve_id,
+        matiere_id=note.matiere_id,
+        trimestre_id=note.trimestre_id,
+        action=action,
+        anciennes_valeurs=avant,
+        nouvelles_valeurs=apres,
+        auteur_id=auteur_id,
+    ))
 
 
 def _vers_out(note: Note, matiere: Matiere) -> NoteOut:
@@ -112,8 +144,6 @@ def _vers_out(note: Note, matiere: Matiere) -> NoteOut:
         note_directe=_f(note.note_directe),
         appreciation=note.appreciation,
         saisi_par=note.saisi_par,
-        valide=note.valide,
-        valide_par=note.valide_par,
         moyenne=moyenne,
         statut=statut,
     )
@@ -153,6 +183,12 @@ def lister_notes(
                 )
             )
         )
+        if classe.professeur_principal_id == user.id:
+            affectees |= set(
+                db.scalars(select(Matiere.id).where(
+                    Matiere.ecole_id == user.ecole_id, Matiere.note_directe.is_(True)
+                ))
+            )
         if matiere_id is not None and matiere_id not in affectees:
             raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Matière non affectée.")
         stmt = stmt.where(Note.matiere_id.in_(affectees or {-1}))
@@ -164,6 +200,55 @@ def lister_notes(
     return [_vers_out(n, cache[n.matiere_id]) for n in notes]
 
 
+@router.get("/historique", response_model=list[NoteHistoriqueOut], dependencies=[AdminOnly])
+def historique_notes(
+    user: CurrentUser,
+    db: DbSession,
+    classe_id: int | None = None,
+    eleve_id: int | None = None,
+    trimestre_id: int | None = None,
+    matiere_id: int | None = None,
+    limite: Annotated[int, Query(ge=1, le=1000)] = 200,
+):
+    """Journal des saisies (le plus récent d'abord), réservé à l'administration."""
+    Auteur = aliased(Utilisateur)
+    stmt = (
+        select(NoteHistorique, Eleve, Matiere, Auteur)
+        .join(Eleve, Eleve.id == NoteHistorique.eleve_id)
+        .join(Matiere, Matiere.id == NoteHistorique.matiere_id)
+        .outerjoin(Auteur, Auteur.id == NoteHistorique.auteur_id)
+        .where(Eleve.ecole_id == user.ecole_id)
+    )
+    if classe_id is not None:
+        stmt = stmt.where(Eleve.classe_id == classe_id)
+    if eleve_id is not None:
+        stmt = stmt.where(NoteHistorique.eleve_id == eleve_id)
+    if trimestre_id is not None:
+        stmt = stmt.where(NoteHistorique.trimestre_id == trimestre_id)
+    if matiere_id is not None:
+        stmt = stmt.where(NoteHistorique.matiere_id == matiere_id)
+    stmt = stmt.order_by(NoteHistorique.le.desc(), NoteHistorique.id.desc()).limit(limite)
+
+    return [
+        NoteHistoriqueOut(
+            id=h.id,
+            note_id=h.note_id,
+            eleve_id=h.eleve_id,
+            eleve_nom=f"{e.nom} {e.prenom}",
+            matiere_id=h.matiere_id,
+            matiere_nom=m.nom,
+            trimestre_id=h.trimestre_id,
+            action=h.action,
+            anciennes_valeurs=h.anciennes_valeurs,
+            nouvelles_valeurs=h.nouvelles_valeurs,
+            auteur_id=h.auteur_id,
+            auteur_nom=f"{a.prenom} {a.nom}" if a else None,
+            le=h.le,
+        )
+        for h, e, m, a in db.execute(stmt)
+    ]
+
+
 @router.get("/{note_id}", response_model=NoteOut)
 def consulter_note(note_id: int, user: CurrentUser, db: DbSession):
     note = db.get(Note, note_id)
@@ -171,7 +256,7 @@ def consulter_note(note_id: int, user: CurrentUser, db: DbSession):
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Note introuvable.")
     eleve = _eleve_de_lecole(db, note.eleve_id, user.ecole_id)
     matiere = db.get(Matiere, note.matiere_id)
-    if user.role != "admin" and not _a_une_affectation(db, user.id, eleve.classe_id, note.matiere_id):
+    if not _peut_consulter(db, user, eleve, matiere):
         raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Accès refusé.")
     return _vers_out(note, matiere)
 
@@ -181,6 +266,12 @@ def enregistrer_note(data: NoteEcrire, user: CurrentUser, db: DbSession):
     eleve = _eleve_de_lecole(db, data.eleve_id, user.ecole_id)
     matiere = _matiere_de_lecole(db, data.matiere_id, user.ecole_id)
     _trimestre_de_lecole(db, data.trimestre_id, user.ecole_id)
+
+    if user.role != "enseignant":
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Les notes ne peuvent être saisies ou modifiées que par l'enseignant concerné.",
+        )
 
     eval_fournis = {c: getattr(data, c) for c in CHAMPS_EVAL if getattr(data, c) is not None}
     if matiere.note_directe:
@@ -196,10 +287,12 @@ def enregistrer_note(data: NoteEcrire, user: CurrentUser, db: DbSession):
         )
 
     if not _peut_saisir(db, user, eleve, matiere):
-        raise HTTPException(
-            status_code=status.HTTP_403_FORBIDDEN,
-            detail="Vous n'êtes pas autorisé à saisir cette note.",
+        detail = (
+            "Seul le professeur principal de la classe saisit la conduite."
+            if matiere.note_directe
+            else "Vous n'êtes pas autorisé à saisir cette note."
         )
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail=detail)
 
     note = db.scalar(
         select(Note).where(
@@ -208,47 +301,24 @@ def enregistrer_note(data: NoteEcrire, user: CurrentUser, db: DbSession):
             Note.trimestre_id == data.trimestre_id,
         )
     )
-    if note is not None and note.valide and user.role != "admin":
-        raise HTTPException(
-            status_code=status.HTTP_409_CONFLICT,
-            detail="Cette note est validée et verrouillée. Demandez à l'administration.",
-        )
-
+    nouvelles = {c: getattr(data, c) for c in CHAMPS_NOTE}
     if note is None:
         note = Note(
             eleve_id=data.eleve_id, matiere_id=data.matiere_id, trimestre_id=data.trimestre_id
         )
         db.add(note)
-
-    for champ in (*CHAMPS_EVAL, "note_directe", "appreciation"):
-        setattr(note, champ, getattr(data, champ))
-    note.saisi_par = user.id
-    # toute modification du contenu invalide la validation précédente
-    note.valide = False
-    note.valide_par = None
-    note.valide_le = None
-
-    db.commit()
-    db.refresh(note)
-    return _vers_out(note, matiere)
-
-
-@router.post("/{note_id}/validation", response_model=NoteOut, dependencies=[AdminOnly])
-def valider_note(note_id: int, data: NoteValidation, user: CurrentUser, db: DbSession):
-    note = db.get(Note, note_id)
-    if note is None:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Note introuvable.")
-    _eleve_de_lecole(db, note.eleve_id, user.ecole_id)
-    matiere = db.get(Matiere, note.matiere_id)
-
-    if data.valide:
-        note.valide = True
-        note.valide_par = user.id
-        note.valide_le = datetime.now(timezone.utc)
+        avant = None
     else:
-        note.valide = False
-        note.valide_par = None
-        note.valide_le = None
+        avant = _valeurs(note)
+        if avant == nouvelles:
+            return _vers_out(note, matiere)   # rien n'a changé : pas de trace inutile
+
+    for champ, valeur in nouvelles.items():
+        setattr(note, champ, valeur)
+    note.saisi_par = user.id
+    db.flush()
+    _journaliser(db, note, "creation" if avant is None else "modification", avant, nouvelles, user.id)
+
     db.commit()
     db.refresh(note)
     return _vers_out(note, matiere)
@@ -260,9 +330,10 @@ def supprimer_note(note_id: int, user: CurrentUser, db: DbSession):
     if note is None:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Note introuvable.")
     eleve = _eleve_de_lecole(db, note.eleve_id, user.ecole_id)
+    matiere = db.get(Matiere, note.matiere_id)
 
-    if user.role != "admin":
-        if note.valide or not _a_une_affectation(db, user.id, eleve.classe_id, note.matiere_id):
-            raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Suppression non autorisée.")
+    if not _peut_saisir(db, user, eleve, matiere):
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Suppression non autorisée.")
+    _journaliser(db, note, "suppression", _valeurs(note), None, user.id)
     db.delete(note)
     db.commit()

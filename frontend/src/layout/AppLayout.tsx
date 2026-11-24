@@ -6,6 +6,7 @@ import {
   ReadOutlined,
   SolutionOutlined,
   TeamOutlined,
+  WalletOutlined,
 } from "@ant-design/icons";
 import { useQuery } from "@tanstack/react-query";
 import { Avatar, Dropdown, Layout, Menu, Segmented, Skeleton, theme, Typography } from "antd";
@@ -38,6 +39,7 @@ const ENTREES: Entree[] = [
   { cle: "/enseignants", libelle: "Enseignants", icone: <SolutionOutlined />, roles: ["admin"] },
   { cle: "/notes", libelle: "Saisie des notes", icone: <ReadOutlined />, roles: ["enseignant"] },
   { cle: "/bulletins", libelle: "Bulletins", icone: <ProfileOutlined />, roles: ["admin"] },
+  { cle: "/paiements", libelle: "Paiements", icone: <WalletOutlined />, roles: ["admin"] },
 ];
 
 export function AppLayout() {

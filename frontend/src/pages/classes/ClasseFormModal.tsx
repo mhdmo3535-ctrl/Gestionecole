@@ -7,6 +7,7 @@ import {
   getAnneesScolaires,
   getNiveaux,
   getSeries,
+  getUtilisateurs,
   modifierClasse,
 } from "../../api/endpoints";
 import type { Classe } from "../../api/types";
@@ -22,6 +23,7 @@ interface Valeurs {
   niveau_id: number;
   serie_id?: number | null;
   annee_scolaire_id: number;
+  professeur_principal_id?: number | null;
 }
 
 export function ClasseFormModal({ open, classe, onClose }: Props) {
@@ -33,6 +35,11 @@ export function ClasseFormModal({ open, classe, onClose }: Props) {
   const niveauxQuery = useQuery({ queryKey: ["niveaux"], queryFn: getNiveaux });
   const seriesQuery = useQuery({ queryKey: ["series"], queryFn: getSeries });
   const anneesQuery = useQuery({ queryKey: ["annees-scolaires"], queryFn: getAnneesScolaires });
+  const enseignantsQuery = useQuery({
+    queryKey: ["utilisateurs", "enseignant", "actifs"],
+    queryFn: () => getUtilisateurs({ role: "enseignant", actif: true }),
+    enabled: open,
+  });
 
   const niveauId = Form.useWatch("niveau_id", form);
   const niveauChoisi = useMemo(
@@ -49,6 +56,7 @@ export function ClasseFormModal({ open, classe, onClose }: Props) {
         niveau_id: classe.niveau_id,
         serie_id: classe.serie_id,
         annee_scolaire_id: classe.annee_scolaire_id,
+        professeur_principal_id: classe.professeur_principal_id,
       });
     } else {
       const active = anneesQuery.data?.find((a) => a.active);
@@ -68,6 +76,7 @@ export function ClasseFormModal({ open, classe, onClose }: Props) {
         niveau_id: v.niveau_id,
         serie_id: estCollege ? null : (v.serie_id ?? null),
         annee_scolaire_id: v.annee_scolaire_id,
+        professeur_principal_id: v.professeur_principal_id ?? null,
       };
       return enEdition ? modifierClasse(classe!.id, payload) : creerClasse(payload);
     },
@@ -131,6 +140,23 @@ export function ClasseFormModal({ open, classe, onClose }: Props) {
             options={(anneesQuery.data ?? []).map((a) => ({
               value: a.id,
               label: a.active ? `${a.libelle} (active)` : a.libelle,
+            }))}
+          />
+        </Form.Item>
+        <Form.Item
+          name="professeur_principal_id"
+          label="Professeur principal"
+          extra="Il saisit la note de conduite des élèves de la classe."
+        >
+          <Select
+            allowClear
+            showSearch
+            optionFilterProp="label"
+            placeholder="Choisir un enseignant"
+            loading={enseignantsQuery.isLoading}
+            options={(enseignantsQuery.data ?? []).map((u) => ({
+              value: u.id,
+              label: `${u.prenom} ${u.nom}`,
             }))}
           />
         </Form.Item>
