@@ -7,6 +7,7 @@ from fastapi.security import OAuth2PasswordRequestForm
 from sqlalchemy import select
 
 from app.core.deps import CurrentUser, DbSession
+from app.core.permissions import matrice
 from app.core.security import create_access_token, verify_password
 from app.models import Utilisateur
 from app.schemas import Token, UtilisateurOut
@@ -32,10 +33,16 @@ def login(
             status_code=status.HTTP_403_FORBIDDEN,
             detail="Ce compte est désactivé.",
         )
-    token = create_access_token(subject=str(user.id), extra={"role": user.role, "ecole_id": user.ecole_id})
+    token = create_access_token(subject=str(user.id), extra={"roles": user.roles, "ecole_id": user.ecole_id})
     return Token(access_token=token)
 
 
 @router.get("/me", response_model=UtilisateurOut)
 def read_me(user: CurrentUser):
     return user
+
+
+@router.get("/droits")
+def lire_droits(_: CurrentUser) -> dict[str, dict[str, list[str]]]:
+    """Matrice des droits (domaine -> rôles qui lisent / modifient), pour l'interface."""
+    return matrice()

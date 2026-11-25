@@ -1,20 +1,14 @@
-import {
-  BookOutlined,
-  IdcardOutlined,
-  LogoutOutlined,
-  ProfileOutlined,
-  ReadOutlined,
-  SolutionOutlined,
-  TeamOutlined,
-} from "@ant-design/icons";
+import { LogoutOutlined } from "@ant-design/icons";
 import { useQuery } from "@tanstack/react-query";
 import { Avatar, Dropdown, Layout, Menu, Segmented, Skeleton, theme, Typography } from "antd";
 import { useMemo, useState } from "react";
 import { Outlet, useLocation, useNavigate } from "react-router-dom";
 import { getAnneesScolaires, getMonEcole } from "../api/endpoints";
 import { useAuth } from "../auth/AuthContext";
+import { libellesRoles } from "../auth/droits";
 import { useModeTheme } from "../ModeThemeProvider";
 import { COULEURS_BENIN, FILET_BENIN, SIDER_TITRE } from "../theme";
+import { itemsDuMenu, rubriquesPour } from "./menus";
 
 function initiales(nom: string): string {
   const mots = nom.trim().split(/\s+/).filter(Boolean);
@@ -23,22 +17,6 @@ function initiales(nom: string): string {
 }
 
 const { Sider, Header, Content } = Layout;
-
-interface Entree {
-  cle: string;
-  libelle: string;
-  icone: React.ReactNode;
-  roles?: Array<"admin" | "enseignant">;
-}
-
-const ENTREES: Entree[] = [
-  { cle: "/eleves", libelle: "Élèves", icone: <IdcardOutlined /> },
-  { cle: "/classes", libelle: "Classes", icone: <TeamOutlined /> },
-  { cle: "/matieres", libelle: "Matières", icone: <BookOutlined />, roles: ["admin"] },
-  { cle: "/enseignants", libelle: "Enseignants", icone: <SolutionOutlined />, roles: ["admin"] },
-  { cle: "/notes", libelle: "Saisie des notes", icone: <ReadOutlined />, roles: ["enseignant"] },
-  { cle: "/bulletins", libelle: "Bulletins", icone: <ProfileOutlined />, roles: ["admin"] },
-];
 
 export function AppLayout() {
   const { utilisateur, deconnexion } = useAuth();
@@ -55,15 +33,15 @@ export function AppLayout() {
   });
   const anneeActive = anneesQuery.data?.find((a) => a.active);
 
-  const entrees = useMemo(
-    () =>
-      ENTREES.filter(
-        (e) => !e.roles || (utilisateur && e.roles.includes(utilisateur.role as "admin" | "enseignant")),
-      ),
-    [utilisateur],
-  );
+  const rubriques = useMemo(() => rubriquesPour(utilisateur?.roles ?? []), [utilisateur]);
+  const cles = rubriques.flatMap((r) => r.entrees.map((e) => e.cle));
+  // une fiche du personnel ouverte depuis « Enseignants » garde cette entrée active
+  const chemin =
+    location.pathname.startsWith("/personnel") && !cles.includes("/personnel")
+      ? "/enseignants"
+      : location.pathname;
 
-  const cleActive = ENTREES.find((e) => location.pathname.startsWith(e.cle))?.cle ?? "/eleves";
+  const cleActive = cles.find((c) => chemin.startsWith(c)) ?? "";
 
   return (
     <Layout hasSider style={{ minHeight: "100vh" }}>
@@ -94,7 +72,7 @@ export function AppLayout() {
           style={{ background: "transparent", borderInlineEnd: "none" }}
           selectedKeys={[cleActive]}
           onClick={({ key }) => navigate(key)}
-          items={entrees.map((e) => ({ key: e.cle, icon: e.icone, label: e.libelle }))}
+          items={itemsDuMenu(rubriques)}
         />
       </Sider>
       <Layout
@@ -165,7 +143,7 @@ export function AppLayout() {
           >
             <span style={{ cursor: "pointer" }}>
               {utilisateur?.prenom} {utilisateur?.nom}{" "}
-              <Typography.Text type="secondary">({utilisateur?.role})</Typography.Text>
+              <Typography.Text type="secondary">({libellesRoles(utilisateur?.roles ?? [])})</Typography.Text>
             </span>
           </Dropdown>
           </div>

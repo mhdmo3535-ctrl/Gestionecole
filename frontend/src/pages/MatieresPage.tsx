@@ -5,12 +5,12 @@ import { useNavigate } from "react-router-dom";
 import { messageErreur } from "../api/client";
 import { getMatieres, supprimerMatiere } from "../api/endpoints";
 import type { Matiere } from "../api/types";
-import { useAuth } from "../auth/AuthContext";
 import { MatiereFormModal } from "./matieres/MatiereFormModal";
+import { useDroits } from "../auth/droits";
 
 export function MatieresPage() {
-  const { utilisateur } = useAuth();
-  const estAdmin = utilisateur?.role === "admin";
+  const { peut } = useDroits();
+  const peutGerer = peut("pedagogie", true);
   const { message } = AntApp.useApp();
   const qc = useQueryClient();
   const navigate = useNavigate();
@@ -40,7 +40,7 @@ export function MatieresPage() {
     <Card
       title="Matières"
       extra={
-        estAdmin && (
+        peutGerer && (
           <Button
             type="primary"
             onClick={() => {
@@ -76,7 +76,9 @@ export function MatieresPage() {
             key: "type",
             width: 220,
             render: (_: unknown, m: Matiere) =>
-              m.note_directe ? (
+              !m.evaluee ? (
+                <Tag color="purple">Sans note · hors moyenne</Tag>
+              ) : m.note_directe ? (
                 <Tag color="gold">Note directe</Tag>
               ) : m.est_choix_langue ? (
                 <Tag color="blue">Choix de langue</Tag>
@@ -84,7 +86,7 @@ export function MatieresPage() {
                 <Tag>3 interros + 2 devoirs</Tag>
               ),
           },
-          ...(estAdmin
+          ...(peutGerer
             ? [
                 {
                   title: "",

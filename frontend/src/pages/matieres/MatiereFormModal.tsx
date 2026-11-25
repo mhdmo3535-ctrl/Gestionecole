@@ -16,6 +16,7 @@ interface Valeurs {
   code?: string | null;
   note_directe: boolean;
   est_choix_langue: boolean;
+  evaluee: boolean;
 }
 
 export function MatiereFormModal({ open, matiere, onClose }: Props) {
@@ -23,6 +24,7 @@ export function MatiereFormModal({ open, matiere, onClose }: Props) {
   const { message } = AntApp.useApp();
   const qc = useQueryClient();
   const [form] = Form.useForm<Valeurs>();
+  const evaluee = Form.useWatch("evaluee", form) ?? true;
 
   useEffect(() => {
     if (!open) return;
@@ -32,10 +34,11 @@ export function MatiereFormModal({ open, matiere, onClose }: Props) {
         code: matiere.code,
         note_directe: matiere.note_directe,
         est_choix_langue: matiere.est_choix_langue,
+        evaluee: matiere.evaluee,
       });
     } else {
       form.resetFields();
-      form.setFieldsValue({ note_directe: false, est_choix_langue: false });
+      form.setFieldsValue({ note_directe: false, est_choix_langue: false, evaluee: true });
     }
   }, [open, matiere, form]);
 
@@ -44,8 +47,9 @@ export function MatiereFormModal({ open, matiere, onClose }: Props) {
       const payload = {
         nom: v.nom,
         code: v.code || null,
-        note_directe: v.note_directe,
-        est_choix_langue: v.est_choix_langue,
+        evaluee: v.evaluee,
+        note_directe: v.evaluee && v.note_directe,
+        est_choix_langue: v.evaluee && v.est_choix_langue,
       };
       return enEdition ? modifierMatiere(matiere!.id, payload) : creerMatiere(payload);
     },
@@ -69,7 +73,12 @@ export function MatiereFormModal({ open, matiere, onClose }: Props) {
       cancelText="Annuler"
       destroyOnHidden
     >
-      <Form form={form} layout="vertical" onFinish={(v) => mutation.mutate(v)} style={{ marginTop: 12 }}>
+      <Form
+        form={form}
+        layout="vertical"
+        onFinish={(v) => mutation.mutate(v)}
+        style={{ marginTop: 12 }}
+      >
         <div style={{ display: "flex", gap: 16 }}>
           <Form.Item
             name="nom"
@@ -84,22 +93,38 @@ export function MatiereFormModal({ open, matiere, onClose }: Props) {
           </Form.Item>
         </div>
         <Form.Item
-          name="note_directe"
-          label="Note directe"
+          name="evaluee"
+          label="Comptée dans les moyennes"
           valuePropName="checked"
-          extra="Une seule note par trimestre, sans interros/devoirs (ex : Conduite)."
+          extra={
+            evaluee
+              ? "Matière notée : coefficients, notes, bulletins."
+              : "Cours sans note (ex : Travaux dirigés) : présent à l'emploi du temps et dans les heures du professeur, mais ni noté, ni au bulletin."
+          }
         >
           <Switch />
         </Form.Item>
-        <Form.Item
-          name="est_choix_langue"
-          label="Choix de langue"
-          valuePropName="checked"
-          extra="La langue réelle est choisie par élève (LV1, LV2)."
-        >
-          <Switch />
-        </Form.Item>
-        {!enEdition && (
+        {evaluee && (
+          <>
+            <Form.Item
+              name="note_directe"
+              label="Note directe"
+              valuePropName="checked"
+              extra="Une seule note par trimestre, sans interros/devoirs (ex : Conduite)."
+            >
+              <Switch />
+            </Form.Item>
+            <Form.Item
+              name="est_choix_langue"
+              label="Choix de langue"
+              valuePropName="checked"
+              extra="La langue réelle est choisie par élève (LV1, LV2)."
+            >
+              <Switch />
+            </Form.Item>
+          </>
+        )}
+        {!enEdition && evaluee && (
           <Typography.Text type="secondary">
             Les coefficients par niveau / série se règlent ensuite sur la fiche de la matière.
           </Typography.Text>

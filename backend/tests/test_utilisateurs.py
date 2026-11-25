@@ -5,7 +5,7 @@ PROF = {
     "prenom": "Koffi",
     "email": "koffi.adjovi@ecole.bj",
     "mot_de_passe": "motdepasse123",
-    "role": "enseignant",
+    "roles": ["enseignant"],
 }
 
 
@@ -25,7 +25,7 @@ def test_admin_cree_un_enseignant(client, auth_headers):
     res = client.post("/utilisateurs", headers=auth_headers, json=PROF)
     assert res.status_code == 201, res.text
     u = res.json()
-    assert u["role"] == "enseignant"
+    assert u["roles"] == ["enseignant"]
     assert u["email"] == "koffi.adjovi@ecole.bj"
     assert u["actif"] is True
 
@@ -37,7 +37,7 @@ def test_email_normalise_et_unique(client, auth_headers):
 
 
 def test_role_parent_refuse_sur_cette_route(client, auth_headers):
-    res = client.post("/utilisateurs", headers=auth_headers, json={**PROF, "role": "parent"})
+    res = client.post("/utilisateurs", headers=auth_headers, json={**PROF, "roles": ["parent"]})
     assert res.status_code == 422
 
 
@@ -52,8 +52,8 @@ def test_lister_et_filtrer_par_role(client, auth_headers):
     client.post("/utilisateurs", headers=auth_headers, json=PROF)
     profs = client.get("/utilisateurs", headers=auth_headers, params={"role": "enseignant"}).json()
     assert [u["email"] for u in profs] == ["koffi.adjovi@ecole.bj"]
-    admins = client.get("/utilisateurs", headers=auth_headers, params={"role": "admin"}).json()
-    assert all(u["role"] == "admin" for u in admins)
+    directeurs = client.get("/utilisateurs", headers=auth_headers, params={"role": "directeur"}).json()
+    assert directeurs and all("directeur" in u["roles"] for u in directeurs)
 
 
 def test_desactiver_un_compte_bloque_la_connexion(client, auth_headers):
@@ -86,7 +86,7 @@ def test_isolation_entre_ecoles_sur_les_utilisateurs(client, auth_headers, db):
     db.flush()
     autre_admin = Utilisateur(
         ecole_id=autre.id, nom="X", prenom="Y", email="x@autre.bj",
-        mot_de_passe_hash=hash_password("motdepasse123"), role="admin",
+        mot_de_passe_hash=hash_password("motdepasse123"), roles=["directeur"],
     )
     db.add(autre_admin)
     db.flush()

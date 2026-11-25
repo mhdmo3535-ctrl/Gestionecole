@@ -1,16 +1,20 @@
-"""Comptes utilisateurs (admins, enseignants) et affectations des enseignants.
+"""Comptes du personnel (administration, enseignants) et affectations des enseignants.
 
-Périmètre : profils Administration et Enseignants. Les comptes parents /
-élèves ont un cycle de vie distinct (créés depuis la fiche élève, connexion
-mobile) et ne passent pas par ces routes.
+Chaque compte porte un ou plusieurs rôles (cumul possible).
+Seul le directeur crée les comptes et attribue les
+rôles ; l'école garde toujours au moins un directeur actif.
+
+Les comptes parents / élèves ont un cycle de vie distinct (créés depuis la
+fiche élève, connexion mobile) et ne passent pas par ces routes.
 """
 
 from typing import Annotated
 
-from fastapi import APIRouter, Depends, HTTPException, Query, status
+from fastapi import APIRouter, HTTPException, Query, status
 from sqlalchemy import select
 
-from app.core.deps import CurrentUser, DbSession, require_roles
+from app.core.deps import CurrentUser, DbSession, ecriture
+from app.core.permissions import Domaine, peut
 from app.core.security import hash_password
 from app.models import Classe, EnseignantAffectation, Matiere, Utilisateur
 from app.schemas import (
@@ -24,7 +28,8 @@ from app.schemas import (
 
 router = APIRouter(prefix="/utilisateurs", tags=["utilisateurs"])
 
-AdminOnly = Depends(require_roles("admin"))
+GererPersonnel = ecriture(Domaine.PERSONNEL)
+GererPedagogie = ecriture(Domaine.PEDAGOGIE)
 
 
 def _get_de_mon_ecole(db: DbSession, user_id: int, ecole_id: int) -> Utilisateur:
@@ -34,23 +39,63 @@ def _get_de_mon_ecole(db: DbSession, user_id: int, ecole_id: int) -> Utilisateur
     return u
 
 
-@router.get("", response_model=list[UtilisateurOut], dependencies=[AdminOnly])
+def _roles_normalises(roles: list[str]) -> list[str]:
+    return sorted(set(roles))
+
+
+def _verifier_un_directeur_reste(db: DbSession, cible: Utilisateur, roles: list[str], actif: bool) -> None:
+    """Refuse un changement qui laisserait l'école sans aucun directeur actif."""
+    if "directeur" in roles and actif:
+        return
+    autres = db.scalar(
+        select(Utilisateur.id).where(
+            Utilisateur.ecole_id == cible.ecole_id,
+            Utilisateur.id != cible.id,
+            Utilisateur.actif.is_(True),
+            Utilisateur.roles.any("directeur"),
+        ).limit(1)
+    )
+    if cible.a_le_role("directeur") and cible.actif and autres is None:
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+            detail="L'école doit garder au moins un directeur actif.",
+        )
+
+
+def _voit_tout_le_personnel(user: Utilisateur) -> bool:
+    return peut(user.roles, Domaine.PERSONNEL)
+
+
+def _verifier_lecture(user: Utilisateur) -> None:
+    """Le personnel complet : directeur. Les enseignants seuls : qui voit la pédagogie."""
+    if not (_voit_tout_le_personnel(user) or peut(user.roles, Domaine.PEDAGOGIE)):
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Accès refusé.")
+
+
+@router.get("", response_model=list[UtilisateurOut])
 def lister_utilisateurs(
     user: CurrentUser,
     db: DbSession,
-    role: Annotated[str | None, Query(pattern="^(admin|enseignant)$")] = None,
+    role: Annotated[
+        str | None,
+        Query(pattern="^(directeur|censeur|surveillant|comptable|secretaire|enseignant)$"),
+    ] = None,
     actif: bool | None = None,
 ):
+    _verifier_lecture(user)
     stmt = select(Utilisateur).where(Utilisateur.ecole_id == user.ecole_id)
+    if not _voit_tout_le_personnel(user):
+        # censeur, surveillant, secrétaire : uniquement les enseignants
+        stmt = stmt.where(Utilisateur.roles.any("enseignant"))
     if role is not None:
-        stmt = stmt.where(Utilisateur.role == role)
+        stmt = stmt.where(Utilisateur.roles.any(role))
     if actif is not None:
         stmt = stmt.where(Utilisateur.actif.is_(actif))
     stmt = stmt.order_by(Utilisateur.nom, Utilisateur.prenom)
     return list(db.scalars(stmt))
 
 
-@router.post("", response_model=UtilisateurOut, status_code=status.HTTP_201_CREATED, dependencies=[AdminOnly])
+@router.post("", response_model=UtilisateurOut, status_code=status.HTTP_201_CREATED, dependencies=[GererPersonnel])
 def creer_utilisateur(data: UtilisateurCreate, user: CurrentUser, db: DbSession):
     email = data.email.strip().lower()
     if db.scalar(select(Utilisateur).where(Utilisateur.email == email)):
@@ -64,7 +109,7 @@ def creer_utilisateur(data: UtilisateurCreate, user: CurrentUser, db: DbSession)
         prenom=data.prenom,
         email=email,
         mot_de_passe_hash=hash_password(data.mot_de_passe),
-        role=data.role,
+        roles=_roles_normalises(data.roles),
         telephone=data.telephone,
     )
     db.add(nouvel)
@@ -73,12 +118,16 @@ def creer_utilisateur(data: UtilisateurCreate, user: CurrentUser, db: DbSession)
     return nouvel
 
 
-@router.get("/{user_id}", response_model=UtilisateurOut, dependencies=[AdminOnly])
+@router.get("/{user_id}", response_model=UtilisateurOut)
 def consulter_utilisateur(user_id: int, user: CurrentUser, db: DbSession):
-    return _get_de_mon_ecole(db, user_id, user.ecole_id)
+    _verifier_lecture(user)
+    cible = _get_de_mon_ecole(db, user_id, user.ecole_id)
+    if not _voit_tout_le_personnel(user) and not cible.est_enseignant:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Utilisateur introuvable.")
+    return cible
 
 
-@router.patch("/{user_id}", response_model=UtilisateurOut, dependencies=[AdminOnly])
+@router.patch("/{user_id}", response_model=UtilisateurOut, dependencies=[GererPersonnel])
 def modifier_utilisateur(user_id: int, data: UtilisateurUpdate, user: CurrentUser, db: DbSession):
     cible = _get_de_mon_ecole(db, user_id, user.ecole_id)
     changes = data.model_dump(exclude_unset=True)
@@ -87,6 +136,14 @@ def modifier_utilisateur(user_id: int, data: UtilisateurUpdate, user: CurrentUse
             status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
             detail="Vous ne pouvez pas désactiver votre propre compte.",
         )
+    if "roles" in changes:
+        if changes["roles"] is None:
+            del changes["roles"]
+        else:
+            changes["roles"] = _roles_normalises(changes["roles"])
+    _verifier_un_directeur_reste(
+        db, cible, changes.get("roles", cible.roles), changes.get("actif", cible.actif)
+    )
     for field, value in changes.items():
         setattr(cible, field, value)
     db.commit()
@@ -94,7 +151,7 @@ def modifier_utilisateur(user_id: int, data: UtilisateurUpdate, user: CurrentUse
     return cible
 
 
-@router.put("/{user_id}/mot-de-passe", status_code=status.HTTP_204_NO_CONTENT, dependencies=[AdminOnly])
+@router.put("/{user_id}/mot-de-passe", status_code=status.HTTP_204_NO_CONTENT, dependencies=[GererPersonnel])
 def reinitialiser_mot_de_passe(user_id: int, data: MotDePasseUpdate, user: CurrentUser, db: DbSession):
     cible = _get_de_mon_ecole(db, user_id, user.ecole_id)
     cible.mot_de_passe_hash = hash_password(data.nouveau_mot_de_passe)
@@ -118,8 +175,8 @@ def _vers_affectation_out(aff: EnseignantAffectation) -> AffectationOut:
 
 @router.get("/{user_id}/affectations", response_model=list[AffectationOut])
 def lister_affectations(user_id: int, user: CurrentUser, db: DbSession):
-    # un enseignant peut voir les siennes ; sinon réservé à l'admin
-    if user.role != "admin" and user.id != user_id:
+    # un enseignant peut voir les siennes ; sinon réservé à qui voit la pédagogie
+    if user.id != user_id and not peut(user.roles, Domaine.PEDAGOGIE):
         raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Accès refusé.")
     enseignant = _get_de_mon_ecole(db, user_id, user.ecole_id)
     stmt = select(EnseignantAffectation).where(
@@ -132,11 +189,11 @@ def lister_affectations(user_id: int, user: CurrentUser, db: DbSession):
     "/{user_id}/affectations",
     response_model=AffectationOut,
     status_code=status.HTTP_201_CREATED,
-    dependencies=[AdminOnly],
+    dependencies=[GererPedagogie],
 )
 def ajouter_affectation(user_id: int, data: AffectationCreate, user: CurrentUser, db: DbSession):
     enseignant = _get_de_mon_ecole(db, user_id, user.ecole_id)
-    if enseignant.role != "enseignant":
+    if not enseignant.est_enseignant:
         raise HTTPException(
             status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
             detail="Seul un compte de rôle « enseignant » peut recevoir une affectation.",
@@ -174,7 +231,7 @@ def ajouter_affectation(user_id: int, data: AffectationCreate, user: CurrentUser
 @router.delete(
     "/{user_id}/affectations/{affectation_id}",
     status_code=status.HTTP_204_NO_CONTENT,
-    dependencies=[AdminOnly],
+    dependencies=[GererPedagogie],
 )
 def retirer_affectation(user_id: int, affectation_id: int, user: CurrentUser, db: DbSession):
     enseignant = _get_de_mon_ecole(db, user_id, user.ecole_id)

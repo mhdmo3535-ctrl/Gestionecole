@@ -21,4 +21,4 @@ def test_me_avec_jeton(client, auth_headers, admin):
     resp = client.get("/auth/me", headers=auth_headers)
     assert resp.status_code == 200
     assert resp.json()["email"] == admin.email
-    assert resp.json()["role"] == "admin"
+    assert resp.json()["roles"] == ["directeur"]

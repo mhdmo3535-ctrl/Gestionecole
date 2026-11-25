@@ -77,7 +77,7 @@ def admin(db, ecole) -> Utilisateur:
         prenom="Test",
         email="admin@test.local",
         mot_de_passe_hash=hash_password("motdepasse"),
-        role="admin",
+        roles=["directeur"],
     )
     db.add(user)
     db.flush()

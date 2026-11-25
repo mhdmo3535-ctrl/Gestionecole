@@ -23,7 +23,7 @@ import {
   type ParentPayload,
 } from "../../api/endpoints";
 import type { LienParent, ParentTuteur } from "../../api/types";
-import { useAuth } from "../../auth/AuthContext";
+import { useDroits } from "../../auth/droits";
 
 const LIEN_LABEL: Record<LienParent, { texte: string; couleur: string }> = {
   pere: { texte: "Père", couleur: "blue" },
@@ -32,8 +32,9 @@ const LIEN_LABEL: Record<LienParent, { texte: string; couleur: string }> = {
 };
 
 export function EleveParentsTab({ eleveId }: { eleveId: number }) {
-  const { utilisateur } = useAuth();
-  const estAdmin = utilisateur?.role === "admin";
+  const { peut } = useDroits();
+  const peutVoir = peut("eleves");
+  const peutModifier = peut("eleves", true);
   const { message } = AntApp.useApp();
   const qc = useQueryClient();
   const [modalOuvert, setModalOuvert] = useState(false);
@@ -43,7 +44,7 @@ export function EleveParentsTab({ eleveId }: { eleveId: number }) {
   const query = useQuery({
     queryKey: ["parents", eleveId],
     queryFn: () => getParents(eleveId),
-    enabled: estAdmin,
+    enabled: peutVoir,
   });
 
   useEffect(() => {
@@ -63,9 +64,7 @@ export function EleveParentsTab({ eleveId }: { eleveId: number }) {
 
   const enregistrement = useMutation({
     mutationFn: (v: ParentPayload) =>
-      enEdition
-        ? modifierParent(eleveId, enEdition.parent_id, v)
-        : ajouterParent(eleveId, v),
+      enEdition ? modifierParent(eleveId, enEdition.parent_id, v) : ajouterParent(eleveId, v),
     onSuccess: () => {
       message.success(enEdition ? "Parent modifié." : "Parent ajouté.");
       qc.invalidateQueries({ queryKey: ["parents", eleveId] });
@@ -84,13 +83,13 @@ export function EleveParentsTab({ eleveId }: { eleveId: number }) {
     onError: (e) => message.error(messageErreur(e)),
   });
 
-  if (!estAdmin) {
+  if (!peutVoir) {
     return (
       <Alert
         type="info"
         showIcon
         message="Accès réservé à l'administration"
-        description="La liste des parents et tuteurs n'est consultable que par l'administration."
+        description="La liste des parents et tuteurs est réservée à la direction, au censeur, au surveillant et à la secrétaire."
       />
     );
   }
@@ -98,16 +97,18 @@ export function EleveParentsTab({ eleveId }: { eleveId: number }) {
 
   return (
     <div>
-      <Button
-        type="primary"
-        onClick={() => {
-          setEnEdition(null);
-          setModalOuvert(true);
-        }}
-        style={{ marginBottom: 16 }}
-      >
-        Ajouter un parent / tuteur
-      </Button>
+      {peutModifier && (
+        <Button
+          type="primary"
+          onClick={() => {
+            setEnEdition(null);
+            setModalOuvert(true);
+          }}
+          style={{ marginBottom: 16 }}
+        >
+          Ajouter un parent / tuteur
+        </Button>
+      )}
 
       <Table<ParentTuteur>
         rowKey="parent_id"
@@ -133,38 +134,41 @@ export function EleveParentsTab({ eleveId }: { eleveId: number }) {
             title: "Compte mobile",
             dataIndex: "a_un_compte",
             width: 130,
-            render: (a: boolean) =>
-              a ? <Tag color="green">Activé</Tag> : <Tag>Non</Tag>,
+            render: (a: boolean) => (a ? <Tag color="green">Activé</Tag> : <Tag>Non</Tag>),
           },
-          {
-            title: "",
-            key: "actions",
-            width: 170,
-            render: (_: unknown, p: ParentTuteur) => (
-              <Space>
-                <Button
-                  size="small"
-                  onClick={() => {
-                    setEnEdition(p);
-                    setModalOuvert(true);
-                  }}
-                >
-                  Modifier
-                </Button>
-                <Popconfirm
-                  title="Retirer ce parent ?"
-                  okText="Retirer"
-                  cancelText="Annuler"
-                  okButtonProps={{ danger: true }}
-                  onConfirm={() => retrait.mutate(p.parent_id)}
-                >
-                  <Button size="small" danger>
-                    Retirer
-                  </Button>
-                </Popconfirm>
-              </Space>
-            ),
-          },
+          ...(peutModifier
+            ? [
+                {
+                  title: "",
+                  key: "actions",
+                  width: 170,
+                  render: (_: unknown, p: ParentTuteur) => (
+                    <Space>
+                      <Button
+                        size="small"
+                        onClick={() => {
+                          setEnEdition(p);
+                          setModalOuvert(true);
+                        }}
+                      >
+                        Modifier
+                      </Button>
+                      <Popconfirm
+                        title="Retirer ce parent ?"
+                        okText="Retirer"
+                        cancelText="Annuler"
+                        okButtonProps={{ danger: true }}
+                        onConfirm={() => retrait.mutate(p.parent_id)}
+                      >
+                        <Button size="small" danger>
+                          Retirer
+                        </Button>
+                      </Popconfirm>
+                    </Space>
+                  ),
+                },
+              ]
+            : []),
         ]}
       />
 
