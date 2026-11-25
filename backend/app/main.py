@@ -9,10 +9,12 @@ from app.routers import (
     bulletins,
     classes,
     eleves,
+    emploi_du_temps,
     matieres,
     notes,
     paiements,
     referentiel,
+    tableau_de_bord,
     utilisateurs,
     vie_scolaire,
 )
@@ -33,10 +35,13 @@ app.include_router(matieres.router)
 app.include_router(utilisateurs.router)
 app.include_router(classes.router)
 app.include_router(eleves.router)
+app.include_router(emploi_du_temps.router)
 app.include_router(notes.router)
 app.include_router(bulletins.router)
 app.include_router(vie_scolaire.router)
+app.include_router(vie_scolaire.router_ecole)
 app.include_router(paiements.router)
+app.include_router(tableau_de_bord.router)
 
 
 @app.get("/health", tags=["health"])

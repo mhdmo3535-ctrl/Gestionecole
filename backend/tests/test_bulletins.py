@@ -94,7 +94,7 @@ def test_decision_apparait_quand_les_trois_trimestres_sont_complets(client, auth
 def test_bulletins_reserves_a_l_administration(client, auth_headers, classe_tle_d):
     s = classe_tle_d
     client.post("/utilisateurs", headers=auth_headers, json={
-        "nom": "P", "prenom": "Q", "email": "prof@ecole.bj", "mot_de_passe": "motdepasse123", "role": "enseignant"})
+        "nom": "P", "prenom": "Q", "email": "prof@ecole.bj", "mot_de_passe": "motdepasse123", "roles": ["enseignant"]})
     h = _login(client, "prof@ecole.bj")
     t1 = s["trimestres"][1]
     assert client.get(f"/classes/{s['classe_id']}/bulletins", headers=h, params={"trimestre_id": t1}).status_code == 403

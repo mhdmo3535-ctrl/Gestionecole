@@ -26,7 +26,7 @@ def scenario(client, auth_headers, niveau_tle, serie_d):
     prof = client.post(
         "/utilisateurs", headers=auth_headers,
         json={"nom": "P", "prenom": "M", "email": "prof.maths@ecole.bj",
-              "mot_de_passe": "motdepasse123", "role": "enseignant"},
+              "mot_de_passe": "motdepasse123", "roles": ["enseignant"]},
     ).json()
     maths = _mid(client, auth_headers, "Mathématiques")
     client.post(
@@ -36,7 +36,7 @@ def scenario(client, auth_headers, niveau_tle, serie_d):
     pp = client.post(
         "/utilisateurs", headers=auth_headers,
         json={"nom": "P", "prenom": "P", "email": "prof.principal@ecole.bj",
-              "mot_de_passe": "motdepasse123", "role": "enseignant"},
+              "mot_de_passe": "motdepasse123", "roles": ["enseignant"]},
     ).json()
     client.patch(f"/classes/{classe['id']}", headers=auth_headers,
                  json={"professeur_principal_id": pp["id"]})
@@ -286,7 +286,7 @@ def test_un_autre_admin_ne_peut_pas_noter_notre_eleve(client, auth_headers, scen
     db.add(autre)
     db.flush()
     db.add(Utilisateur(ecole_id=autre.id, nom="X", prenom="Y", email="x@autre.bj",
-                       mot_de_passe_hash=hash_password("motdepasse123"), role="admin"))
+                       mot_de_passe_hash=hash_password("motdepasse123"), roles=["directeur"]))
     db.flush()
 
     s = scenario

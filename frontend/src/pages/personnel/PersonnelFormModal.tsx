@@ -1,13 +1,14 @@
 import { useMutation, useQueryClient } from "@tanstack/react-query";
-import { App as AntApp, Form, Input, Modal, Switch } from "antd";
+import { App as AntApp, Form, Input, Modal, Select, Switch } from "antd";
 import { useEffect } from "react";
 import { messageErreur } from "../../api/client";
 import { creerUtilisateur, modifierUtilisateur } from "../../api/endpoints";
-import type { Utilisateur } from "../../api/types";
+import type { Role, Utilisateur } from "../../api/types";
+import { LIBELLES_ROLES, ROLES_PERSONNEL } from "../../auth/droits";
 
 interface Props {
   open: boolean;
-  enseignant: Utilisateur | null; // null => création
+  membre: Utilisateur | null; // null => création
   onClose: () => void;
 }
 
@@ -17,38 +18,50 @@ interface Valeurs {
   email: string;
   telephone?: string | null;
   mot_de_passe?: string;
+  roles: Role[];
   actif: boolean;
 }
 
-export function EnseignantFormModal({ open, enseignant, onClose }: Props) {
-  const enEdition = enseignant !== null;
+const DESCRIPTIONS: Record<string, string> = {
+  directeur: "accès à tout, comptes et paramétrage",
+  censeur: "pédagogie, emplois du temps, bulletins",
+  surveillant: "présences, permissions, discipline",
+  comptable: "tranches, contrôle des encaissements, paie",
+  secretaire: "inscriptions, encaissement des frais",
+  enseignant: "saisie des notes de ses classes",
+};
+
+export function PersonnelFormModal({ open, membre, onClose }: Props) {
+  const enEdition = membre !== null;
   const { message } = AntApp.useApp();
   const qc = useQueryClient();
   const [form] = Form.useForm<Valeurs>();
 
   useEffect(() => {
     if (!open) return;
-    if (enseignant) {
+    if (membre) {
       form.setFieldsValue({
-        nom: enseignant.nom,
-        prenom: enseignant.prenom,
-        email: enseignant.email,
-        telephone: enseignant.telephone,
-        actif: enseignant.actif,
+        nom: membre.nom,
+        prenom: membre.prenom,
+        email: membre.email,
+        telephone: membre.telephone,
+        roles: membre.roles,
+        actif: membre.actif,
       });
     } else {
       form.resetFields();
-      form.setFieldValue("actif", true);
+      form.setFieldsValue({ actif: true, roles: ["enseignant"] });
     }
-  }, [open, enseignant, form]);
+  }, [open, membre, form]);
 
   const mutation = useMutation({
     mutationFn: (v: Valeurs) => {
       if (enEdition) {
-        return modifierUtilisateur(enseignant!.id, {
+        return modifierUtilisateur(membre!.id, {
           nom: v.nom,
           prenom: v.prenom,
           telephone: v.telephone || null,
+          roles: v.roles,
           actif: v.actif,
         });
       }
@@ -57,12 +70,12 @@ export function EnseignantFormModal({ open, enseignant, onClose }: Props) {
         prenom: v.prenom,
         email: v.email.trim(),
         mot_de_passe: v.mot_de_passe!,
-        role: "enseignant",
+        roles: v.roles,
         telephone: v.telephone || null,
       });
     },
     onSuccess: () => {
-      message.success(enEdition ? "Enseignant modifié." : "Enseignant créé.");
+      message.success(enEdition ? "Compte modifié." : "Compte créé.");
       qc.invalidateQueries({ queryKey: ["utilisateurs"] });
       qc.invalidateQueries({ queryKey: ["utilisateur"] });
       onClose();
@@ -72,7 +85,7 @@ export function EnseignantFormModal({ open, enseignant, onClose }: Props) {
 
   return (
     <Modal
-      title={enEdition ? "Modifier l'enseignant" : "Nouvel enseignant"}
+      title={enEdition ? "Modifier le compte" : "Nouveau membre du personnel"}
       open={open}
       onCancel={onClose}
       onOk={() => form.submit()}
@@ -81,20 +94,55 @@ export function EnseignantFormModal({ open, enseignant, onClose }: Props) {
       cancelText="Annuler"
       destroyOnHidden
     >
-      <Form form={form} layout="vertical" onFinish={(v) => mutation.mutate(v)} style={{ marginTop: 12 }}>
-        <div style={{ display: "flex", gap: 16 }}>
-          <Form.Item name="nom" label="Nom" rules={[{ required: true, message: "Requis." }]} style={{ flex: 1 }}>
+      <Form
+        form={form}
+        layout="vertical"
+        onFinish={(v) => mutation.mutate(v)}
+        style={{ marginTop: 12 }}
+      >
+        <div style={{ display: "flex", gap: 16, flexWrap: "wrap" }}>
+          <Form.Item
+            name="nom"
+            label="Nom"
+            rules={[{ required: true, message: "Requis." }]}
+            style={{ flex: "1 1 180px" }}
+          >
             <Input />
           </Form.Item>
           <Form.Item
             name="prenom"
             label="Prénom"
             rules={[{ required: true, message: "Requis." }]}
-            style={{ flex: 1 }}
+            style={{ flex: "1 1 180px" }}
           >
             <Input />
           </Form.Item>
         </div>
+        <Form.Item
+          name="roles"
+          label="Rôle(s)"
+          rules={[
+            { required: true, type: "array", min: 1, message: "Choisissez au moins un rôle." },
+          ]}
+          extra="Une même personne peut cumuler plusieurs rôles : ses droits s'additionnent."
+        >
+          <Select
+            mode="multiple"
+            placeholder="Choisir"
+            optionLabelProp="label"
+            options={ROLES_PERSONNEL.map((r) => ({
+              value: r,
+              label: LIBELLES_ROLES[r],
+              desc: DESCRIPTIONS[r],
+            }))}
+            optionRender={(o) => (
+              <div>
+                <div>{o.data.label}</div>
+                <div style={{ fontSize: 12, opacity: 0.65 }}>{o.data.desc}</div>
+              </div>
+            )}
+          />
+        </Form.Item>
         <Form.Item
           name="email"
           label="Adresse email"
@@ -106,8 +154,8 @@ export function EnseignantFormModal({ open, enseignant, onClose }: Props) {
         >
           <Input disabled={enEdition} />
         </Form.Item>
-        <div style={{ display: "flex", gap: 16 }}>
-          <Form.Item name="telephone" label="Téléphone" style={{ flex: 1 }}>
+        <div style={{ display: "flex", gap: 16, flexWrap: "wrap" }}>
+          <Form.Item name="telephone" label="Téléphone" style={{ flex: "1 1 180px" }}>
             <Input />
           </Form.Item>
           {!enEdition && (
@@ -118,7 +166,7 @@ export function EnseignantFormModal({ open, enseignant, onClose }: Props) {
                 { required: true, message: "Requis." },
                 { min: 8, message: "Au moins 8 caractères." },
               ]}
-              style={{ flex: 1 }}
+              style={{ flex: "1 1 180px" }}
             >
               <Input.Password autoComplete="new-password" />
             </Form.Item>

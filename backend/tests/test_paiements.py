@@ -175,7 +175,7 @@ def test_enseignant_refuse(client, db, ecole, eleve):
     db.add(
         Utilisateur(
             ecole_id=ecole.id, nom="P", prenom="Q", email="prof.paie@test.local",
-            mot_de_passe_hash=hash_password("motdepasse"), role="enseignant",
+            mot_de_passe_hash=hash_password("motdepasse"), roles=["enseignant"],
         )
     )
     db.flush()

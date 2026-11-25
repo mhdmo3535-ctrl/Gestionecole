@@ -91,7 +91,7 @@ def test_enseignant_ne_peut_pas_creer_de_classe(client, admin, db, ecole, niveau
 
     prof = Utilisateur(
         ecole_id=ecole.id, nom="P", prenom="Q", email="p@test.local",
-        mot_de_passe_hash=hash_password("motdepasse"), role="enseignant",
+        mot_de_passe_hash=hash_password("motdepasse"), roles=["enseignant"],
     )
     db.add(prof)
     db.flush()
@@ -160,7 +160,7 @@ def test_acces_sans_jeton_refuse(client):
 def _creer_utilisateur(client, auth_headers, email, role="enseignant"):
     return client.post("/utilisateurs", headers=auth_headers, json={
         "nom": "Dossou", "prenom": "Mireille", "email": email,
-        "mot_de_passe": "motdepasse123", "role": role}).json()
+        "mot_de_passe": "motdepasse123", "roles": [role]}).json()
 
 
 def test_designer_un_professeur_principal(client, auth_headers, niveau_3e):
@@ -176,7 +176,7 @@ def test_designer_un_professeur_principal(client, auth_headers, niveau_3e):
 
 
 def test_professeur_principal_doit_etre_un_enseignant(client, auth_headers, niveau_3e):
-    autre_admin = _creer_utilisateur(client, auth_headers, "admin2@ecole.bj", role="admin")
+    autre_admin = _creer_utilisateur(client, auth_headers, "censeur@ecole.bj", role="censeur")
     classe = client.post("/classes", headers=auth_headers, json={"nom": "3e C", "niveau_id": niveau_3e.id}).json()
     res = client.patch(f"/classes/{classe['id']}", headers=auth_headers,
                        json={"professeur_principal_id": autre_admin["id"]})

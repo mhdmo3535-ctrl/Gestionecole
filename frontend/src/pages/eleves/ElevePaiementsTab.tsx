@@ -26,13 +26,15 @@ import { useNavigate } from "react-router-dom";
 import { messageErreur } from "../../api/client";
 import { annulerPaiement, enregistrerPaiement, getSituationPaiements } from "../../api/endpoints";
 import type { ModePaiement, Paiement, SituationPaiements, SituationTranche } from "../../api/types";
-import { useAuth } from "../../auth/AuthContext";
 import { fcfa, MODES, STATUT } from "../paiements/format";
 import { RecuModal } from "../paiements/RecuModal";
+import { useDroits } from "../../auth/droits";
 
 export function ElevePaiementsTab({ eleveId }: { eleveId: number }) {
-  const { utilisateur } = useAuth();
-  const estAdmin = utilisateur?.role === "admin";
+  const { peut } = useDroits();
+  const peutVoir = peut("encaissements");
+  const peutEncaisser = peut("encaissements", true);
+  const peutAnnuler = peut("finances", true); // annuler un paiement, fixer les tranches
   const { message } = AntApp.useApp();
   const qc = useQueryClient();
   const navigate = useNavigate();
@@ -43,7 +45,7 @@ export function ElevePaiementsTab({ eleveId }: { eleveId: number }) {
   const query = useQuery({
     queryKey: ["paiements", eleveId],
     queryFn: () => getSituationPaiements(eleveId),
-    enabled: estAdmin,
+    enabled: peutVoir,
   });
 
   const invalider = () => {
@@ -61,11 +63,11 @@ export function ElevePaiementsTab({ eleveId }: { eleveId: number }) {
     onError: (e) => message.error(messageErreur(e)),
   });
 
-  if (!estAdmin) {
+  if (!peutVoir) {
     return (
       <Empty
         image={Empty.PRESENTED_IMAGE_SIMPLE}
-        description="Les paiements ne sont consultables que par l'administration de l'école."
+        description="Les paiements sont réservés à la direction, au DAF et à la secrétaire."
       />
     );
   }
@@ -78,9 +80,11 @@ export function ElevePaiementsTab({ eleveId }: { eleveId: number }) {
         image={Empty.PRESENTED_IMAGE_SIMPLE}
         description={`Aucune tranche de paiement n'est configurée${s.annee_libelle ? ` pour ${s.annee_libelle}` : ""}.`}
       >
-        <Button type="primary" onClick={() => navigate("/paiements?onglet=tranches")}>
-          Configurer les tranches
-        </Button>
+        {peutAnnuler && (
+          <Button type="primary" onClick={() => navigate("/paiements?onglet=tranches")}>
+            Configurer les tranches
+          </Button>
+        )}
       </Empty>
     );
   }
@@ -120,7 +124,7 @@ export function ElevePaiementsTab({ eleveId }: { eleveId: number }) {
           <Typography.Title level={5} style={{ margin: 0 }}>
             Tranches
           </Typography.Title>
-          {s.reste > 0 && (
+          {s.reste > 0 && peutEncaisser && (
             <Button type="primary" icon={<PlusOutlined />} onClick={() => setEncaissement({})}>
               Enregistrer un paiement
             </Button>
@@ -158,7 +162,8 @@ export function ElevePaiementsTab({ eleveId }: { eleveId: number }) {
               key: "action",
               width: 110,
               render: (_: unknown, t: SituationTranche) =>
-                t.reste > 0 && (
+                t.reste > 0 &&
+                peutEncaisser && (
                   <Button size="small" onClick={() => setEncaissement({ trancheId: t.tranche_id })}>
                     Encaisser
                   </Button>
@@ -209,6 +214,7 @@ export function ElevePaiementsTab({ eleveId }: { eleveId: number }) {
                   <Button size="small" icon={<FileTextOutlined />} onClick={() => setRecuId(p.id)}>
                     Reçu
                   </Button>
+                  {peutAnnuler && (
                   <Popconfirm
                     title="Annuler ce paiement ?"
                     description={`Le reçu ${p.numero_recu} ne sera plus valable.`}
@@ -221,6 +227,7 @@ export function ElevePaiementsTab({ eleveId }: { eleveId: number }) {
                       Annuler
                     </Button>
                   </Popconfirm>
+                  )}
                 </Space>
               ),
             },

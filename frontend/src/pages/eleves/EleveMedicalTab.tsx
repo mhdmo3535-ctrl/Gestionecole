@@ -17,7 +17,7 @@ import { useEffect, useState } from "react";
 import { messageErreur } from "../../api/client";
 import { enregistrerInfosMedicales, getInfosMedicales } from "../../api/endpoints";
 import type { InfosMedicales } from "../../api/types";
-import { useAuth } from "../../auth/AuthContext";
+import { useDroits } from "../../auth/droits";
 
 const GROUPES = ["A+", "A-", "B+", "B-", "AB+", "AB-", "O+", "O-"];
 
@@ -27,8 +27,9 @@ type Valeurs = Pick<
 >;
 
 export function EleveMedicalTab({ eleveId }: { eleveId: number }) {
-  const { utilisateur } = useAuth();
-  const estAdmin = utilisateur?.role === "admin";
+  const { peut } = useDroits();
+  const peutVoir = peut("medical");
+  const peutModifier = peut("medical", true);
   const { message } = AntApp.useApp();
   const qc = useQueryClient();
   const [form] = Form.useForm<Valeurs>();
@@ -37,7 +38,7 @@ export function EleveMedicalTab({ eleveId }: { eleveId: number }) {
   const query = useQuery({
     queryKey: ["infos-medicales", eleveId],
     queryFn: () => getInfosMedicales(eleveId),
-    enabled: estAdmin,
+    enabled: peutVoir,
   });
 
   // Le formulaire n'est monté qu'en mode édition : on le remplit à l'ouverture.
@@ -73,13 +74,13 @@ export function EleveMedicalTab({ eleveId }: { eleveId: number }) {
     onError: (e) => message.error(messageErreur(e)),
   });
 
-  if (!estAdmin) {
+  if (!peutVoir) {
     return (
       <Alert
         type="info"
         showIcon
         message="Accès réservé à l'administration"
-        description="Les informations médicales ne sont consultables que par l'administration de l'école."
+        description="Les informations médicales sont réservées à la direction, à la secrétaire et au surveillant général."
       />
     );
   }
@@ -108,9 +109,11 @@ export function EleveMedicalTab({ eleveId }: { eleveId: number }) {
           <Descriptions.Item label="Contacts d'urgence">{texte(query.data?.contacts_urgence)}</Descriptions.Item>
           <Descriptions.Item label="Remarques médicales">{texte(query.data?.remarques)}</Descriptions.Item>
         </Descriptions>
-        <Button icon={<EditOutlined />} onClick={() => setEnEdition(true)} style={{ marginTop: 16 }}>
-          Modifier
-        </Button>
+        {peutModifier && (
+          <Button icon={<EditOutlined />} onClick={() => setEnEdition(true)} style={{ marginTop: 16 }}>
+            Modifier
+          </Button>
+        )}
         {miseAJour}
       </div>
     );

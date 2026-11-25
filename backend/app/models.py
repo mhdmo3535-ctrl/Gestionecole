@@ -6,10 +6,10 @@ Les modules restants seront ajoutés au
 fur et à mesure.
 """
 
-from datetime import date, datetime
+from datetime import date, datetime, time
 from decimal import Decimal
 
-from sqlalchemy.dialects.postgresql import JSONB
+from sqlalchemy.dialects.postgresql import ARRAY, JSONB
 from sqlalchemy import (
     Boolean,
     Date,
@@ -18,6 +18,7 @@ from sqlalchemy import (
     Numeric,
     SmallInteger,
     String,
+    Time,
     Text,
     UniqueConstraint,
     func,
@@ -108,11 +109,18 @@ class Utilisateur(Base):
     prenom: Mapped[str] = mapped_column(String(100))
     email: Mapped[str] = mapped_column(String(150), unique=True)
     mot_de_passe_hash: Mapped[str] = mapped_column(String(255))
-    role: Mapped[str] = mapped_column(String(20))
+    # un ou plusieurs rôles (cumul possible) : voir app/core/permissions.py
+    roles: Mapped[list[str]] = mapped_column(ARRAY(String(20)))
     telephone: Mapped[str | None] = mapped_column(String(30))
     actif: Mapped[bool] = mapped_column(Boolean, default=True)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
 
+    def a_le_role(self, role: str) -> bool:
+        return role in (self.roles or [])
+
+    @property
+    def est_enseignant(self) -> bool:
+        return self.a_le_role("enseignant")
 
 class Matiere(Base):
     __tablename__ = "matieres"
@@ -124,6 +132,8 @@ class Matiere(Base):
     code: Mapped[str | None] = mapped_column(String(20))
     est_choix_langue: Mapped[bool] = mapped_column(Boolean, default=False)
     note_directe: Mapped[bool] = mapped_column(Boolean, default=False)
+    # False : cours sans note (Travaux dirigés…) — emploi du temps oui, moyennes non
+    evaluee: Mapped[bool] = mapped_column(Boolean, default=True)
 
 
 class EnseignantAffectation(Base):
@@ -137,6 +147,25 @@ class EnseignantAffectation(Base):
 
     classe: Mapped[Classe] = relationship(lazy="joined")
     matiere: Mapped[Matiere] = relationship(lazy="joined")
+
+
+class Creneau(Base):
+    """Un cours de l'emploi du temps : une classe, une matière, un professeur, un jour, un horaire."""
+
+    __tablename__ = "creneaux"
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    ecole_id: Mapped[int] = mapped_column(ForeignKey("ecoles.id", ondelete="CASCADE"))
+    classe_id: Mapped[int] = mapped_column(ForeignKey("classes.id", ondelete="CASCADE"))
+    matiere_id: Mapped[int] = mapped_column(ForeignKey("matieres.id", ondelete="CASCADE"))
+    enseignant_id: Mapped[int] = mapped_column(ForeignKey("utilisateurs.id", ondelete="CASCADE"))
+    jour: Mapped[int] = mapped_column(SmallInteger)          # 1 = lundi … 6 = samedi
+    heure_debut: Mapped[time] = mapped_column(Time)
+    heure_fin: Mapped[time] = mapped_column(Time)
+
+    classe: Mapped[Classe] = relationship(lazy="joined")
+    matiere: Mapped[Matiere] = relationship(lazy="joined")
+    enseignant: Mapped["Utilisateur"] = relationship(lazy="joined")
 
 
 class Parent(Base):

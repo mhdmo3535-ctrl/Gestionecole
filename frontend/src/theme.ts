@@ -51,6 +51,9 @@ export function construireTheme(mode: ModeTheme): ThemeConfig {
         itemActiveBg: "rgba(255,255,255,0.18)",
         itemHeight: 44,
         iconSize: 16,
+        // titres de rubrique (« Pédagogie », « Finances »…) : discrets, lisibles sur le vert
+        groupTitleColor: "rgba(255,255,255,0.6)",
+        groupTitleFontSize: 11,
       },
       Button: {
         primaryShadow: "none",

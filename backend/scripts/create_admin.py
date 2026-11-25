@@ -1,7 +1,8 @@
-r"""Crée un compte administrateur.
+r"""Crée le compte du directeur.
 
 Aucun compte n'existe au départ (sécurité). Ce script sert à créer le
-tout premier admin ; ensuite, la création des comptes se fera depuis l'API.
+tout premier compte (rôle « directeur ») ; ensuite, le directeur crée les
+autres comptes du personnel depuis l'application.
 
 Usage :
     .\.venv\Scripts\python.exe -m scripts.create_admin --email admin@ecole.bj --prenom Awa --nom Doe
@@ -20,7 +21,7 @@ from app.models import Ecole, Utilisateur
 
 
 def main() -> int:
-    parser = argparse.ArgumentParser(description="Créer un compte administrateur")
+    parser = argparse.ArgumentParser(description="Créer le compte du directeur")
     parser.add_argument("--email", required=True)
     parser.add_argument("--prenom", required=True)
     parser.add_argument("--nom", required=True)
@@ -52,11 +53,11 @@ def main() -> int:
             prenom=args.prenom,
             email=args.email,
             mot_de_passe_hash=hash_password(password),
-            role="admin",
+            roles=["directeur"],
         )
         db.add(user)
         db.commit()
-        print(f"Admin créé : {args.prenom} {args.nom} <{args.email}> (école {ecole.id} — {ecole.nom})")
+        print(f"Directeur créé : {args.prenom} {args.nom} <{args.email}> (école {ecole.id} — {ecole.nom})")
     return 0
 
 

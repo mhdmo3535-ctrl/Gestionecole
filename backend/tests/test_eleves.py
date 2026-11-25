@@ -12,7 +12,7 @@ def enseignant(db, ecole):
         prenom="Test",
         email="prof@test.local",
         mot_de_passe_hash=hash_password("motdepasse"),
-        role="enseignant",
+        roles=["enseignant"],
     )
     db.add(user)
     db.flush()

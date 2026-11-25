@@ -1,6 +1,7 @@
 import { ArrowLeftOutlined } from "@ant-design/icons";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import {
+  Alert,
   App as AntApp,
   Button,
   Card,
@@ -29,15 +30,15 @@ import {
   retirerCoefficient,
 } from "../../api/endpoints";
 import type { Coefficient } from "../../api/types";
-import { useAuth } from "../../auth/AuthContext";
 import { MatiereFormModal } from "./MatiereFormModal";
+import { useDroits } from "../../auth/droits";
 
 export function MatiereDetailPage() {
   const { id } = useParams();
   const matiereId = Number(id);
   const navigate = useNavigate();
-  const { utilisateur } = useAuth();
-  const estAdmin = utilisateur?.role === "admin";
+  const { peut } = useDroits();
+  const peutGerer = peut("pedagogie", true);
   const { message } = AntApp.useApp();
   const qc = useQueryClient();
 
@@ -148,96 +149,108 @@ export function MatiereDetailPage() {
               {matiere.nom}
             </Typography.Title>
             {matiere.code && <Tag>{matiere.code}</Tag>}
+            {!matiere.evaluee && <Tag color="purple">Sans note · hors moyenne</Tag>}
             {matiere.note_directe && <Tag color="gold">Note directe</Tag>}
             {matiere.est_choix_langue && <Tag color="blue">Choix de langue</Tag>}
           </Space>
         }
-        extra={estAdmin && <Button onClick={() => setEditionOuverte(true)}>Modifier</Button>}
+        extra={peutGerer && <Button onClick={() => setEditionOuverte(true)}>Modifier</Button>}
       >
-        <Typography.Title level={5} style={{ marginTop: 0 }}>
-          Coefficients par niveau / série
-        </Typography.Title>
-        <Typography.Paragraph type="secondary">
-          Une matière sans coefficient déclaré pour un niveau (collège) ou une série (lycée)
-          n'apparaît pas dans les classes de ce niveau/série.
-        </Typography.Paragraph>
-
-        <Table<Coefficient>
-          rowKey="id"
-          size="small"
-          loading={coefficientsQuery.isLoading}
-          dataSource={coefficientsQuery.data ?? []}
-          pagination={false}
-          columns={[
-            { title: "Portée", key: "portee", render: (_: unknown, c) => portee_libelle(c) },
-            { title: "Coefficient", dataIndex: "coefficient", width: 130, align: "center" },
-            ...(estAdmin
-              ? [
-                  {
-                    title: "",
-                    key: "actions",
-                    width: 100,
-                    render: (_: unknown, c: Coefficient) => (
-                      <Popconfirm
-                        title="Retirer ce coefficient ?"
-                        okText="Retirer"
-                        cancelText="Annuler"
-                        okButtonProps={{ danger: true }}
-                        onConfirm={() => retrait.mutate(c.id)}
-                      >
-                        <Button size="small" danger>
-                          Retirer
-                        </Button>
-                      </Popconfirm>
-                    ),
-                  },
-                ]
-              : []),
-          ]}
-        />
-
-        {estAdmin && (
+        {!matiere.evaluee ? (
+          <Alert
+            type="info"
+            showIcon
+            message="Cours sans note"
+            description="Cette matière figure à l'emploi du temps et compte dans les heures des professeurs, mais elle n'a ni coefficient, ni note, ni place au bulletin. Pour la rendre notée, cliquez sur « Modifier »."
+          />
+        ) : (
           <>
-            <Divider />
-            <Typography.Text strong>Déclarer / modifier un coefficient</Typography.Text>
-            <Form
-              form={form}
-              layout="inline"
-              onFinish={(v) => declaration.mutate(v)}
-              style={{ marginTop: 12, rowGap: 12 }}
-            >
-              <Form.Item label="Portée">
-                <Segmented
-                  value={portee}
-                  onChange={(v) => {
-                    setPortee(v as "college" | "lycee");
-                    form.setFieldValue("cible", undefined);
-                  }}
-                  options={[
-                    { label: "Collège (niveau)", value: "college" },
-                    { label: "Lycée (série)", value: "lycee" },
-                  ]}
-                />
-              </Form.Item>
-              <Form.Item name="cible" rules={[{ required: true, message: "Choisir." }]}>
-                <Select
-                  style={{ width: 200 }}
-                  placeholder={portee === "college" ? "Niveau" : "Série"}
-                  options={portee === "college" ? ciblesCollege : ciblesLycee}
-                />
-              </Form.Item>
-              <Form.Item
-                name="coefficient"
-                rules={[{ required: true, message: "Coefficient." }]}
-              >
-                <InputNumber min={0.5} max={20} step={0.5} placeholder="Coef." />
-              </Form.Item>
-              <Form.Item>
-                <Button type="primary" htmlType="submit" loading={declaration.isPending}>
-                  Enregistrer
-                </Button>
-              </Form.Item>
-            </Form>
+            <Typography.Title level={5} style={{ marginTop: 0 }}>
+              Coefficients par niveau / série
+            </Typography.Title>
+            <Typography.Paragraph type="secondary">
+              Une matière sans coefficient déclaré pour un niveau (collège) ou une série (lycée)
+              n'apparaît pas dans les classes de ce niveau/série.
+            </Typography.Paragraph>
+
+            <Table<Coefficient>
+              rowKey="id"
+              size="small"
+              loading={coefficientsQuery.isLoading}
+              dataSource={coefficientsQuery.data ?? []}
+              pagination={false}
+              columns={[
+                { title: "Portée", key: "portee", render: (_: unknown, c) => portee_libelle(c) },
+                { title: "Coefficient", dataIndex: "coefficient", width: 130, align: "center" },
+                ...(peutGerer
+                  ? [
+                      {
+                        title: "",
+                        key: "actions",
+                        width: 100,
+                        render: (_: unknown, c: Coefficient) => (
+                          <Popconfirm
+                            title="Retirer ce coefficient ?"
+                            okText="Retirer"
+                            cancelText="Annuler"
+                            okButtonProps={{ danger: true }}
+                            onConfirm={() => retrait.mutate(c.id)}
+                          >
+                            <Button size="small" danger>
+                              Retirer
+                            </Button>
+                          </Popconfirm>
+                        ),
+                      },
+                    ]
+                  : []),
+              ]}
+            />
+
+            {peutGerer && (
+              <>
+                <Divider />
+                <Typography.Text strong>Déclarer / modifier un coefficient</Typography.Text>
+                <Form
+                  form={form}
+                  layout="inline"
+                  onFinish={(v) => declaration.mutate(v)}
+                  style={{ marginTop: 12, rowGap: 12 }}
+                >
+                  <Form.Item label="Portée">
+                    <Segmented
+                      value={portee}
+                      onChange={(v) => {
+                        setPortee(v as "college" | "lycee");
+                        form.setFieldValue("cible", undefined);
+                      }}
+                      options={[
+                        { label: "Collège (niveau)", value: "college" },
+                        { label: "Lycée (série)", value: "lycee" },
+                      ]}
+                    />
+                  </Form.Item>
+                  <Form.Item name="cible" rules={[{ required: true, message: "Choisir." }]}>
+                    <Select
+                      style={{ width: 200 }}
+                      placeholder={portee === "college" ? "Niveau" : "Série"}
+                      options={portee === "college" ? ciblesCollege : ciblesLycee}
+                    />
+                  </Form.Item>
+                  <Form.Item
+                    name="coefficient"
+                    rules={[{ required: true, message: "Coefficient." }]}
+                  >
+                    <InputNumber min={0.5} max={20} step={0.5} placeholder="Coef." />
+                  </Form.Item>
+                  <Form.Item>
+                    <Button type="primary" htmlType="submit" loading={declaration.isPending}>
+                      Enregistrer
+                    </Button>
+                  </Form.Item>
+                </Form>
+              </>
+            )}
           </>
         )}
       </Card>

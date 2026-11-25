@@ -23,7 +23,7 @@ def autre_admin(db, autre_ecole) -> Utilisateur:
         prenom="Foo",
         email="admin@autre.local",
         mot_de_passe_hash=hash_password("motdepasse"),
-        role="admin",
+        roles=["directeur"],
     )
     db.add(u)
     db.flush()
@@ -66,12 +66,12 @@ def test_les_classes_sont_cloisonnees(client, auth_headers, autre_admin, niveau_
 def test_email_unique_au_niveau_global(db, ecole, autre_ecole):
     db.add(Utilisateur(
         ecole_id=ecole.id, nom="A", prenom="A", email="doublon@x.local",
-        mot_de_passe_hash=hash_password("motdepasse"), role="admin",
+        mot_de_passe_hash=hash_password("motdepasse"), roles=["directeur"],
     ))
     db.flush()
     db.add(Utilisateur(
         ecole_id=autre_ecole.id, nom="B", prenom="B", email="doublon@x.local",
-        mot_de_passe_hash=hash_password("motdepasse"), role="admin",
+        mot_de_passe_hash=hash_password("motdepasse"), roles=["directeur"],
     ))
     with pytest.raises(IntegrityError):
         db.flush()

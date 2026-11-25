@@ -5,17 +5,18 @@ Une classe appartient à une école, une année scolaire, un niveau, et
 via ``eleves.classe_id``.
 """
 
-from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi import APIRouter, HTTPException, status
 from sqlalchemy import func, select
 
-from app.core.deps import CurrentUser, DbSession, require_roles
+from app.core.deps import CurrentUser, DbSession, ecriture, lecture
+from app.core.permissions import Domaine
 from app.models import AnneeScolaire, Classe, Eleve, Matiere, Niveau, Serie, Utilisateur
 from app.schemas import ClasseCreate, ClasseMatiereOut, ClasseOut, ClasseUpdate, EleveOut
 from app.services.coefficients import matieres_de_la_classe
 
 router = APIRouter(prefix="/classes", tags=["classes"])
 
-AdminOnly = Depends(require_roles("admin"))
+GererPedagogie = ecriture(Domaine.PEDAGOGIE)
 
 
 def _annee_active_id(db: DbSession, ecole_id: int) -> int:
@@ -58,7 +59,7 @@ def _valider_professeur_principal(db: DbSession, user_id: int | None, ecole_id: 
     if user_id is None:
         return
     prof = db.get(Utilisateur, user_id)
-    if prof is None or prof.ecole_id != ecole_id or prof.role != "enseignant" or not prof.actif:
+    if prof is None or prof.ecole_id != ecole_id or not prof.est_enseignant or not prof.actif:
         raise HTTPException(
             status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
             detail="Le professeur principal doit être un enseignant actif de l'école.",
@@ -146,7 +147,7 @@ def lister_matieres_de_la_classe(classe_id: int, user: CurrentUser, db: DbSessio
     ]
 
 
-@router.post("", response_model=ClasseOut, status_code=status.HTTP_201_CREATED, dependencies=[AdminOnly])
+@router.post("", response_model=ClasseOut, status_code=status.HTTP_201_CREATED, dependencies=[GererPedagogie])
 def creer_classe(data: ClasseCreate, user: CurrentUser, db: DbSession):
     annee_id = data.annee_scolaire_id or _annee_active_id(db, user.ecole_id)
     _valider_annee(db, annee_id, user.ecole_id)
@@ -180,7 +181,7 @@ def creer_classe(data: ClasseCreate, user: CurrentUser, db: DbSession):
     return _vers_out(db, classe)
 
 
-@router.patch("/{classe_id}", response_model=ClasseOut, dependencies=[AdminOnly])
+@router.patch("/{classe_id}", response_model=ClasseOut, dependencies=[GererPedagogie])
 def modifier_classe(classe_id: int, data: ClasseUpdate, user: CurrentUser, db: DbSession):
     classe = db.get(Classe, classe_id)
     if classe is None or classe.ecole_id != user.ecole_id:
@@ -220,7 +221,7 @@ def modifier_classe(classe_id: int, data: ClasseUpdate, user: CurrentUser, db: D
     return _vers_out(db, classe)
 
 
-@router.delete("/{classe_id}", status_code=status.HTTP_204_NO_CONTENT, dependencies=[AdminOnly])
+@router.delete("/{classe_id}", status_code=status.HTTP_204_NO_CONTENT, dependencies=[GererPedagogie])
 def supprimer_classe(classe_id: int, user: CurrentUser, db: DbSession):
     classe = db.get(Classe, classe_id)
     if classe is None or classe.ecole_id != user.ecole_id:

@@ -4,8 +4,8 @@ import { useMemo, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { getClasses, getEleves } from "../api/endpoints";
 import type { Eleve } from "../api/types";
-import { useAuth } from "../auth/AuthContext";
 import { EleveFormModal } from "./eleves/EleveFormModal";
+import { useDroits } from "../auth/droits";
 
 const STATUT_COULEUR: Record<Eleve["statut"], string> = {
   actif: "green",
@@ -14,8 +14,8 @@ const STATUT_COULEUR: Record<Eleve["statut"], string> = {
 };
 
 export function ElevesPage() {
-  const { utilisateur } = useAuth();
-  const estAdmin = utilisateur?.role === "admin";
+  const { peut } = useDroits();
+  const peutInscrire = peut("eleves", true);
   const navigate = useNavigate();
 
   const [recherche, setRecherche] = useState("");
@@ -36,7 +36,7 @@ export function ElevesPage() {
     <Card
       title="Élèves"
       extra={
-        estAdmin && (
+        peutInscrire && (
           <Button type="primary" onClick={() => setModalOuvert(true)}>
             Nouvel élève
           </Button>

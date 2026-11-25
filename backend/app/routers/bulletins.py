@@ -3,11 +3,12 @@
 from decimal import Decimal
 from typing import Annotated
 
-from fastapi import APIRouter, Depends, HTTPException, Query, status
+from fastapi import APIRouter, HTTPException, Query, status
 from sqlalchemy.orm import Session
 
 from app.calcul import arrondi_affichage, format_note
-from app.core.deps import CurrentUser, DbSession, require_roles
+from app.core.deps import CurrentUser, DbSession, ecriture, lecture
+from app.core.permissions import Domaine
 from app.models import AnneeScolaire, Classe, Ecole, Eleve, Trimestre
 from app.schemas import (
     BulletinClasse,
@@ -25,7 +26,7 @@ from app.services.bulletins import (
 )
 
 # Génération des bulletins : directeur et censeur.
-router = APIRouter(tags=["bulletins"], dependencies=[Depends(require_roles("admin"))])
+router = APIRouter(tags=["bulletins"], dependencies=[lecture(Domaine.BULLETINS)])
 
 
 def _f(x: Decimal | None) -> float | None:

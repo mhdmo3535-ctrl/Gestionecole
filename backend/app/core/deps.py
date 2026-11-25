@@ -1,4 +1,4 @@
-"""Dépendances FastAPI : session, utilisateur courant, contrôle de rôle."""
+"""Dépendances FastAPI : session, utilisateur courant, contrôle des droits."""
 
 from typing import Annotated
 
@@ -7,6 +7,7 @@ from fastapi import Depends, HTTPException, status
 from fastapi.security import OAuth2PasswordBearer
 from sqlalchemy.orm import Session
 
+from app.core.permissions import Domaine, peut
 from app.core.security import decode_access_token
 from app.database import get_db
 from app.models import Utilisateur
@@ -40,15 +41,23 @@ def get_current_user(
 CurrentUser = Annotated[Utilisateur, Depends(get_current_user)]
 
 
-def require_roles(*roles: str):
-    """Renvoie une dépendance qui n'autorise que les rôles donnés."""
+def exige(domaine: Domaine, ecrire: bool = False):
+    """Dépendance : l'utilisateur doit avoir le droit de lire (ou modifier) ce domaine."""
 
-    def checker(user: CurrentUser) -> Utilisateur:
-        if user.role not in roles:
+    def verifier(user: CurrentUser) -> Utilisateur:
+        if not peut(user.roles, domaine, ecrire):
             raise HTTPException(
                 status_code=status.HTTP_403_FORBIDDEN,
                 detail="Vous n'avez pas les droits pour cette action.",
             )
         return user
 
-    return checker
+    return Depends(verifier)
+
+
+def lecture(domaine: Domaine):
+    return exige(domaine)
+
+
+def ecriture(domaine: Domaine):
+    return exige(domaine, ecrire=True)

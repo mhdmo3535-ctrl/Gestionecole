@@ -13,14 +13,14 @@ export function LoginPage() {
   const [erreur, setErreur] = useState<string | null>(null);
   const [enCours, setEnCours] = useState(false);
 
-  if (pret && utilisateur) return <Navigate to="/eleves" replace />;
+  if (pret && utilisateur) return <Navigate to="/" replace />;
 
   async function onFinish(valeurs: { email: string; motDePasse: string }) {
     setErreur(null);
     setEnCours(true);
     try {
       await connexion(valeurs.email.trim(), valeurs.motDePasse);
-      navigate("/eleves", { replace: true });
+      navigate("/", { replace: true });
     } catch (e) {
       setErreur(messageErreur(e, "Connexion impossible."));
     } finally {

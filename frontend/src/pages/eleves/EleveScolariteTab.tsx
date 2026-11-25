@@ -3,13 +3,13 @@ import { Alert, Card, Descriptions, Divider, Empty, Select, Skeleton, Typography
 import { useEffect, useState } from "react";
 import { getClasse, getTrimestres } from "../../api/endpoints";
 import type { Eleve } from "../../api/types";
-import { useAuth } from "../../auth/AuthContext";
 import { BulletinEleveVue } from "../bulletins/BulletinEleveVue";
 import { ProgressionChart } from "./ProgressionChart";
+import { useDroits } from "../../auth/droits";
 
 export function EleveScolariteTab({ eleve }: { eleve: Eleve }) {
-  const { utilisateur } = useAuth();
-  const estAdmin = utilisateur?.role === "admin";
+  const { peut } = useDroits();
+  const voitBulletins = peut("bulletins");
   const [trimestreId, setTrimestreId] = useState<number | undefined>();
 
   const classeQuery = useQuery({
@@ -54,8 +54,8 @@ export function EleveScolariteTab({ eleve }: { eleve: Eleve }) {
       <Divider />
 
       <Typography.Title level={5}>Progression</Typography.Title>
-      {!estAdmin ? (
-        <Alert type="info" showIcon message="La progression est consultable par l'administration." />
+      {!voitBulletins ? (
+        <Alert type="info" showIcon message="La progression est consultable par la direction et le censeur." />
       ) : !eleve.classe_id ? (
         <Typography.Text type="secondary">
           Rattachez l'élève à une classe pour suivre sa progression.
@@ -72,11 +72,11 @@ export function EleveScolariteTab({ eleve }: { eleve: Eleve }) {
       <Divider />
 
       <Typography.Title level={5}>Bulletins</Typography.Title>
-      {!estAdmin ? (
+      {!voitBulletins ? (
         <Alert
           type="info"
           showIcon
-          message="Les bulletins sont consultables par l'administration."
+          message="Les bulletins sont consultables par la direction et le censeur."
         />
       ) : !eleve.classe_id ? (
         <Typography.Text type="secondary">

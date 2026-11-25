@@ -16,13 +16,13 @@ import { useState } from "react";
 import { useNavigate, useParams, useSearchParams } from "react-router-dom";
 import { getClasse, getEleve } from "../../api/endpoints";
 import type { Eleve } from "../../api/types";
-import { useAuth } from "../../auth/AuthContext";
 import { EleveFormModal } from "./EleveFormModal";
 import { EleveMedicalTab } from "./EleveMedicalTab";
 import { EleveParentsTab } from "./EleveParentsTab";
 import { ElevePaiementsTab } from "./ElevePaiementsTab";
 import { EleveScolariteTab } from "./EleveScolariteTab";
 import { EleveVieScolaireTab } from "./EleveVieScolaireTab";
+import { useDroits } from "../../auth/droits";
 
 const STATUT_LIBELLE: Record<Eleve["statut"], { texte: string; couleur: string }> = {
   actif: { texte: "Actif", couleur: "green" },
@@ -35,8 +35,8 @@ export function EleveDossierPage() {
   const eleveId = Number(id);
   const navigate = useNavigate();
   const [searchParams] = useSearchParams();
-  const { utilisateur } = useAuth();
-  const estAdmin = utilisateur?.role === "admin";
+  const { peut } = useDroits();
+  const peutModifier = peut("eleves", true);
   const [editionOuverte, setEditionOuverte] = useState(false);
 
   const eleveQuery = useQuery({
@@ -99,7 +99,7 @@ export function EleveDossierPage() {
           </Space>
         }
         extra={
-          estAdmin && <Button onClick={() => setEditionOuverte(true)}>Modifier</Button>
+          peutModifier && <Button onClick={() => setEditionOuverte(true)}>Modifier</Button>
         }
       >
         <Tabs

@@ -21,7 +21,7 @@ def test_nom_de_matiere_insensible_a_la_casse(client, auth_headers):
 def test_enseignant_ne_peut_pas_creer_de_matiere(client, auth_headers):
     client.post(
         "/utilisateurs", headers=auth_headers,
-        json={"nom": "P", "prenom": "Q", "email": "p@ecole.bj", "mot_de_passe": "motdepasse123", "role": "enseignant"},
+        json={"nom": "P", "prenom": "Q", "email": "p@ecole.bj", "mot_de_passe": "motdepasse123", "roles": ["enseignant"]},
     )
     h = _login(client, "p@ecole.bj")
     assert client.post("/matieres", headers=h, json={"nom": "X"}).status_code == 403

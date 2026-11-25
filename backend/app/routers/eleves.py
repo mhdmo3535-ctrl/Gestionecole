@@ -6,10 +6,11 @@ Toutes les routes sont limitées à l'école de l'utilisateur connecté
 
 from typing import Annotated
 
-from fastapi import APIRouter, Depends, HTTPException, Query, status
+from fastapi import APIRouter, HTTPException, Query, status
 from sqlalchemy import func, select
 
-from app.core.deps import CurrentUser, DbSession, require_roles
+from app.core.deps import CurrentUser, DbSession, ecriture, lecture
+from app.core.permissions import Domaine
 from app.models import Eleve, EleveInfosMedicales, EleveParent, Parent
 from app.schemas import (
     EleveCreate,
@@ -25,7 +26,10 @@ from app.schemas import (
 router = APIRouter(prefix="/eleves", tags=["eleves"])
 
 # admin : accès complet. enseignant : lecture seule (consultation de ses classes).
-AdminOnly = Depends(require_roles("admin"))
+LireEleves = lecture(Domaine.ELEVES)
+GererEleves = ecriture(Domaine.ELEVES)
+LireMedical = lecture(Domaine.MEDICAL)
+GererMedical = ecriture(Domaine.MEDICAL)
 
 
 @router.get("", response_model=list[EleveOut])
@@ -59,7 +63,7 @@ def consulter_eleve(eleve_id: int, user: CurrentUser, db: DbSession):
     return eleve
 
 
-@router.post("", response_model=EleveOut, status_code=status.HTTP_201_CREATED, dependencies=[AdminOnly])
+@router.post("", response_model=EleveOut, status_code=status.HTTP_201_CREATED, dependencies=[GererEleves])
 def creer_eleve(data: EleveCreate, user: CurrentUser, db: DbSession):
     existe = db.scalar(
         select(Eleve).where(
@@ -79,7 +83,7 @@ def creer_eleve(data: EleveCreate, user: CurrentUser, db: DbSession):
     return eleve
 
 
-@router.patch("/{eleve_id}", response_model=EleveOut, dependencies=[AdminOnly])
+@router.patch("/{eleve_id}", response_model=EleveOut, dependencies=[GererEleves])
 def modifier_eleve(eleve_id: int, data: EleveUpdate, user: CurrentUser, db: DbSession):
     eleve = db.get(Eleve, eleve_id)
     if eleve is None or eleve.ecole_id != user.ecole_id:
@@ -117,7 +121,7 @@ def _eleve_de_lecole(db: DbSession, eleve_id: int, ecole_id: int) -> Eleve:
     return eleve
 
 
-@router.get("/{eleve_id}/infos-medicales", response_model=InfosMedicalesOut, dependencies=[AdminOnly])
+@router.get("/{eleve_id}/infos-medicales", response_model=InfosMedicalesOut, dependencies=[LireMedical])
 def lire_infos_medicales(eleve_id: int, user: CurrentUser, db: DbSession):
     _eleve_de_lecole(db, eleve_id, user.ecole_id)
     infos = db.get(EleveInfosMedicales, eleve_id)
@@ -126,7 +130,7 @@ def lire_infos_medicales(eleve_id: int, user: CurrentUser, db: DbSession):
     return infos
 
 
-@router.put("/{eleve_id}/infos-medicales", response_model=InfosMedicalesOut, dependencies=[AdminOnly])
+@router.put("/{eleve_id}/infos-medicales", response_model=InfosMedicalesOut, dependencies=[GererMedical])
 def enregistrer_infos_medicales(
     eleve_id: int, data: InfosMedicalesUpdate, user: CurrentUser, db: DbSession
 ):
@@ -160,7 +164,7 @@ def _vers_parent_out(lien: EleveParent) -> ParentOut:
     )
 
 
-@router.get("/{eleve_id}/parents", response_model=list[ParentOut], dependencies=[AdminOnly])
+@router.get("/{eleve_id}/parents", response_model=list[ParentOut], dependencies=[LireEleves])
 def lister_parents(eleve_id: int, user: CurrentUser, db: DbSession):
     _eleve_de_lecole(db, eleve_id, user.ecole_id)
     liens = db.scalars(select(EleveParent).where(EleveParent.eleve_id == eleve_id))
@@ -171,7 +175,7 @@ def lister_parents(eleve_id: int, user: CurrentUser, db: DbSession):
     "/{eleve_id}/parents",
     response_model=ParentOut,
     status_code=status.HTTP_201_CREATED,
-    dependencies=[AdminOnly],
+    dependencies=[GererEleves],
 )
 def ajouter_parent(eleve_id: int, data: ParentCreate, user: CurrentUser, db: DbSession):
     _eleve_de_lecole(db, eleve_id, user.ecole_id)
@@ -199,7 +203,7 @@ def _lien_de_lecole(db: DbSession, eleve_id: int, parent_id: int, ecole_id: int)
     return lien
 
 
-@router.patch("/{eleve_id}/parents/{parent_id}", response_model=ParentOut, dependencies=[AdminOnly])
+@router.patch("/{eleve_id}/parents/{parent_id}", response_model=ParentOut, dependencies=[GererEleves])
 def modifier_parent(
     eleve_id: int, parent_id: int, data: ParentUpdate, user: CurrentUser, db: DbSession
 ):
@@ -217,7 +221,7 @@ def modifier_parent(
 @router.delete(
     "/{eleve_id}/parents/{parent_id}",
     status_code=status.HTTP_204_NO_CONTENT,
-    dependencies=[AdminOnly],
+    dependencies=[GererEleves],
 )
 def retirer_parent(eleve_id: int, parent_id: int, user: CurrentUser, db: DbSession):
     lien = _lien_de_lecole(db, eleve_id, parent_id, user.ecole_id)

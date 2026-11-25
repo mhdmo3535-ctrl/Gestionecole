@@ -39,6 +39,7 @@ import {
 } from "../api/endpoints";
 import type { StatutPaiementEleve, SuiviLigne, Tranche } from "../api/types";
 import { fcfa, STATUT } from "./paiements/format";
+import { useDroits } from "../auth/droits";
 
 export function PaiementsPage() {
   const [searchParams, setSearchParams] = useSearchParams();
@@ -96,6 +97,7 @@ const FILTRES_STATUT: { value: StatutPaiementEleve | "tous"; label: string }[] =
 ];
 
 function Suivi({ anneeId, onConfigurer }: { anneeId: number; onConfigurer: () => void }) {
+  const peutFixer = useDroits().peut("finances", true);
   const navigate = useNavigate();
   const { token } = theme.useToken();
   const [classeId, setClasseId] = useState<number | undefined>(undefined);
@@ -129,9 +131,11 @@ function Suivi({ anneeId, onConfigurer }: { anneeId: number; onConfigurer: () =>
         message={`Aucune tranche configurée pour ${s.annee_libelle}`}
         description="Définissez d'abord les tranches (montants et dates limites) pour suivre les paiements des élèves."
         action={
-          <Button type="primary" onClick={onConfigurer}>
-            Configurer les tranches
-          </Button>
+          peutFixer && (
+            <Button type="primary" onClick={onConfigurer}>
+              Configurer les tranches
+            </Button>
+          )
         }
       />
     );
@@ -271,6 +275,7 @@ interface ValeursTranche {
 }
 
 function Tranches({ anneeId }: { anneeId: number }) {
+  const peutFixer = useDroits().peut("finances", true);
   const { message } = AntApp.useApp();
   const qc = useQueryClient();
   const [form] = Form.useForm<ValeursTranche>();
@@ -321,9 +326,11 @@ function Tranches({ anneeId }: { anneeId: number }) {
           Les tranches s'appliquent à tous les élèves de l'année. Total annuel par élève :{" "}
           <Typography.Text strong>{fcfa(total)}</Typography.Text>
         </Typography.Text>
-        <Button type="primary" icon={<PlusOutlined />} onClick={() => setModal({ tranche: null })}>
-          Ajouter une tranche
-        </Button>
+        {peutFixer && (
+          <Button type="primary" icon={<PlusOutlined />} onClick={() => setModal({ tranche: null })}>
+            Ajouter une tranche
+          </Button>
+        )}
       </div>
 
       <Table<Tranche>
@@ -342,37 +349,41 @@ function Tranches({ anneeId }: { anneeId: number }) {
             render: (d: string | null) => (d ? dayjs(d).format("DD/MM/YYYY") : "—"),
           },
           { title: "Paiements reçus", dataIndex: "nb_paiements", align: "center", width: 150 },
-          {
-            title: "",
-            key: "actions",
-            width: 180,
-            render: (_: unknown, t) => (
-              <Space>
-                <Button size="small" onClick={() => setModal({ tranche: t })}>
-                  Modifier
-                </Button>
-                {t.nb_paiements > 0 ? (
-                  <Tooltip title="Des paiements sont enregistrés sur cette tranche.">
-                    <Button size="small" danger disabled>
-                      Supprimer
+          ...(peutFixer
+            ? [
+              {
+                title: "",
+                key: "actions",
+                width: 180,
+                render: (_: unknown, t) => (
+                  <Space>
+                    <Button size="small" onClick={() => setModal({ tranche: t })}>
+                      Modifier
                     </Button>
-                  </Tooltip>
-                ) : (
-                  <Popconfirm
-                    title="Supprimer cette tranche ?"
-                    okText="Supprimer"
-                    cancelText="Annuler"
-                    okButtonProps={{ danger: true }}
-                    onConfirm={() => suppression.mutate(t.id)}
-                  >
-                    <Button size="small" danger>
-                      Supprimer
-                    </Button>
-                  </Popconfirm>
-                )}
-              </Space>
-            ),
-          },
+                    {t.nb_paiements > 0 ? (
+                      <Tooltip title="Des paiements sont enregistrés sur cette tranche.">
+                        <Button size="small" danger disabled>
+                          Supprimer
+                        </Button>
+                      </Tooltip>
+                    ) : (
+                      <Popconfirm
+                        title="Supprimer cette tranche ?"
+                        okText="Supprimer"
+                        cancelText="Annuler"
+                        okButtonProps={{ danger: true }}
+                        onConfirm={() => suppression.mutate(t.id)}
+                      >
+                        <Button size="small" danger>
+                          Supprimer
+                        </Button>
+                      </Popconfirm>
+                    )}
+                  </Space>
+                ),
+              },
+              ]
+            : []),
         ]}
       />
 

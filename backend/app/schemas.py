@@ -2,7 +2,7 @@
 
 import datetime as _dt
 from datetime import date, datetime
-from typing import Annotated
+from typing import Annotated, Literal
 
 from pydantic import BaseModel, ConfigDict, Field
 
@@ -22,12 +22,14 @@ class UtilisateurOut(BaseModel):
     nom: str
     prenom: str
     email: str
-    role: str
+    roles: list[str]
     telephone: str | None = None
     actif: bool = True
 
 
-ROLES_GERABLES = "^(admin|enseignant)$"   # parents/élèves : cycle de vie à part
+# rôles attribuables via /utilisateurs (parents/élèves : cycle de vie à part)
+RolePersonnel = Literal["directeur", "censeur", "surveillant", "comptable", "secretaire", "enseignant"]
+ListeRoles = Annotated[list[RolePersonnel], Field(min_length=1, max_length=6)]
 
 
 class UtilisateurCreate(BaseModel):
@@ -35,14 +37,14 @@ class UtilisateurCreate(BaseModel):
     prenom: str = Field(min_length=1, max_length=100)
     email: str = Field(min_length=3, max_length=150)
     mot_de_passe: str = Field(min_length=8, max_length=128)
-    role: str = Field(pattern=ROLES_GERABLES)
+    roles: ListeRoles
     telephone: str | None = Field(default=None, max_length=30)
 
 
 class UtilisateurUpdate(BaseModel):
     nom: str | None = Field(default=None, min_length=1, max_length=100)
     prenom: str | None = Field(default=None, min_length=1, max_length=100)
-    role: str | None = Field(default=None, pattern=ROLES_GERABLES)
+    roles: ListeRoles | None = None
     telephone: str | None = Field(default=None, max_length=30)
     actif: bool | None = None
 
@@ -62,6 +64,7 @@ class MatiereOut(BaseModel):
     code: str | None
     est_choix_langue: bool
     note_directe: bool
+    evaluee: bool = True
 
 
 class MatiereCreate(BaseModel):
@@ -69,6 +72,7 @@ class MatiereCreate(BaseModel):
     code: str | None = Field(default=None, max_length=20)
     est_choix_langue: bool = False
     note_directe: bool = False
+    evaluee: bool = True
 
 
 class MatiereUpdate(BaseModel):
@@ -76,6 +80,7 @@ class MatiereUpdate(BaseModel):
     code: str | None = Field(default=None, max_length=20)
     est_choix_langue: bool | None = None
     note_directe: bool | None = None
+    evaluee: bool | None = None
 
 
 class CoefficientDeclare(BaseModel):
@@ -252,6 +257,18 @@ class PermissionOut(BaseModel):
     statut: str
     commentaire_traitement: str | None
     traite_le: datetime | None
+
+
+class PermissionEcoleOut(PermissionOut):
+    """Une demande vue depuis la liste de toute l'école."""
+
+    model_config = ConfigDict(from_attributes=False)
+
+    eleve_nom: str
+    matricule: str
+    classe_nom: str | None
+    traite_par_nom: str | None
+    demande_le: datetime
 
 
 # ---------- Référentiel ----------
@@ -606,3 +623,128 @@ class SuiviPaiements(BaseModel):
     nb_soldes: int
     nb_en_retard: int
     lignes: list[SuiviLigne]
+
+
+# ---------- Tableau de bord ----------
+
+class TdbTrimestre(BaseModel):
+    id: int
+    numero: int
+    annee_libelle: str
+
+
+class TdbPeriode(BaseModel):
+    debut: date
+    fin: date
+    jours_ouvres: int
+
+
+class TdbEffectifs(BaseModel):
+    eleves_actifs: int
+    filles: int
+    garcons: int
+    classes: int
+    enseignants_actifs: int
+
+
+class TdbScolarite(BaseModel):
+    moyenne_ecole: float | None
+    taux_reussite: float | None      # part des élèves notés avec une moyenne >= 10
+    eleves_notes: int
+
+
+class TdbVieScolaire(BaseModel):
+    taux_presence: float | None
+    jours_absence: int
+    retards: int
+    permissions_en_attente: int
+
+
+class TdbFinances(BaseModel):
+    annee_libelle: str
+    attendu: float
+    encaisse: float
+    reste: float
+    taux_recouvrement: float | None
+    encaisse_mois: float
+    eleves_en_retard: int
+
+
+class TdbAlerte(BaseModel):
+    code: str
+    niveau: str                      # attention | info
+    libelle: str
+    nombre: int
+    lien: str | None = None
+
+
+class TdbLigne(BaseModel):
+    """Une classe (ou un niveau, classe_id = None) ; chaque indicateur est None si non visible."""
+
+    classe_id: int | None = None
+    libelle: str
+    niveau_nom: str
+    effectif: int
+    moyenne: float | None = None
+    taux_reussite: float | None = None
+    taux_presence: float | None = None
+    taux_recouvrement: float | None = None
+
+
+class TableauDeBord(BaseModel):
+    trimestre: TdbTrimestre | None
+    periode_presence: TdbPeriode | None
+    effectifs: TdbEffectifs
+    scolarite: TdbScolarite | None
+    vie_scolaire: TdbVieScolaire | None
+    finances: TdbFinances | None
+    alertes: list[TdbAlerte]
+    classes: list[TdbLigne]
+    niveaux: list[TdbLigne]
+
+
+# ---------- Emploi du temps ----------
+
+class CreneauEcrire(BaseModel):
+    classe_id: int
+    matiere_id: int
+    enseignant_id: int
+    jour: int = Field(ge=1, le=6)            # 1 = lundi … 6 = samedi
+    heure_debut: _dt.time
+    heure_fin: _dt.time
+    # True : si le professeur n'est pas encore affecté à cette classe pour cette
+    # matière, l'affectation est créée en même temps que le cours
+    creer_affectation: bool = False
+
+
+class CreneauModifier(BaseModel):
+    matiere_id: int | None = None
+    enseignant_id: int | None = None
+    jour: int | None = Field(default=None, ge=1, le=6)
+    heure_debut: _dt.time | None = None
+    heure_fin: _dt.time | None = None
+    creer_affectation: bool = False
+
+
+class CreneauOut(BaseModel):
+    id: int
+    classe_id: int
+    classe_nom: str
+    matiere_id: int
+    matiere_nom: str
+    enseignant_id: int
+    enseignant_nom: str
+    jour: int
+    heure_debut: _dt.time
+    heure_fin: _dt.time
+    duree_minutes: int
+
+
+class AffectationClasseOut(BaseModel):
+    """Qui enseigne quoi dans une classe (pour proposer le bon professeur)."""
+
+    enseignant_id: int
+    enseignant_nom: str
+    matiere_id: int
+    matiere_nom: str
+

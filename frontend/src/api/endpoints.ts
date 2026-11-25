@@ -2,30 +2,37 @@ import { api } from "./client";
 import type {
   Absence,
   Affectation,
+  AffectationClasse,
   AnneeScolaire,
   BulletinClasse,
   BulletinEleve,
   Classe,
   ClasseMatiere,
   Coefficient,
+  Creneau,
+  CreneauPayload,
   Discipline,
   Ecole,
   Eleve,
   InfosMedicales,
   LienParent,
+  MatriceDroits,
   Matiere,
   ModePaiement,
   Paiement,
   Recu,
   SituationPaiements,
   SuiviPaiements,
+  TableauDeBord,
   Tranche,
   Niveau,
   ParentTuteur,
   Note,
   NoteHistorique,
   Permission,
+  PermissionEcole,
   ProgressionEleve,
+  Role,
   Serie,
   StatutPermission,
   Trimestre,
@@ -128,6 +135,8 @@ export const ajouterPermission = (
   eleveId: number,
   payload: { date_debut: string; date_fin: string; motif: string },
 ) => api.post<Permission>(`/eleves/${eleveId}/permissions`, payload).then((r) => r.data);
+export const getAutorisationsEcole = () =>
+  api.get<PermissionEcole[]>("/autorisations-absence").then((r) => r.data);
 export const traiterPermission = (
   eleveId: number,
   id: number,
@@ -172,10 +181,17 @@ export const creerMatiere = (payload: {
   code?: string | null;
   note_directe?: boolean;
   est_choix_langue?: boolean;
+  evaluee?: boolean;
 }) => api.post<Matiere>("/matieres", payload).then((r) => r.data);
 export const modifierMatiere = (
   id: number,
-  payload: Partial<{ nom: string; code: string | null; note_directe: boolean; est_choix_langue: boolean }>,
+  payload: Partial<{
+    nom: string;
+    code: string | null;
+    note_directe: boolean;
+    est_choix_langue: boolean;
+    evaluee: boolean;
+  }>,
 ) => api.patch<Matiere>(`/matieres/${id}`, payload).then((r) => r.data);
 export const supprimerMatiere = (id: number) => api.delete(`/matieres/${id}`);
 
@@ -188,6 +204,8 @@ export const declarerCoefficient = (
 export const retirerCoefficient = (matiereId: number, coefficientId: number) =>
   api.delete(`/matieres/${matiereId}/coefficients/${coefficientId}`);
 
+export const getDroits = () => api.get<MatriceDroits>("/auth/droits").then((r) => r.data);
+
 // ---------- Utilisateurs & affectations ----------
 
 export interface UtilisateurPayload {
@@ -195,7 +213,7 @@ export interface UtilisateurPayload {
   prenom: string;
   email: string;
   mot_de_passe: string;
-  role: "admin" | "enseignant";
+  roles: Role[];
   telephone?: string | null;
 }
 
@@ -297,3 +315,23 @@ export const getRecu = (paiementId: number) =>
   api.get<Recu>(`/paiements/${paiementId}/recu`).then((r) => r.data);
 export const getSuiviPaiements = (params: { annee_scolaire_id?: number; classe_id?: number }) =>
   api.get<SuiviPaiements>("/paiements/suivi", { params }).then((r) => r.data);
+
+// ---------- Tableau de bord ----------
+
+export const getTableauDeBord = (trimestreId?: number) =>
+  api
+    .get<TableauDeBord>("/tableau-de-bord", { params: { trimestre_id: trimestreId } })
+    .then((r) => r.data);
+
+// ---------- Emploi du temps ----------
+
+export const getEmploiDuTemps = (params: { classe_id?: number; enseignant_id?: number }) =>
+  api.get<Creneau[]>("/emploi-du-temps", { params }).then((r) => r.data);
+export const ajouterCreneau = (payload: CreneauPayload) =>
+  api.post<Creneau>("/emploi-du-temps", payload).then((r) => r.data);
+export const modifierCreneau = (id: number, payload: Partial<Omit<CreneauPayload, "classe_id">>) =>
+  api.patch<Creneau>(`/emploi-du-temps/${id}`, payload).then((r) => r.data);
+export const supprimerCreneau = (id: number) => api.delete(`/emploi-du-temps/${id}`);
+export const getAffectationsDeLaClasse = (classeId: number) =>
+  api.get<AffectationClasse[]>(`/classes/${classeId}/affectations`).then((r) => r.data);
+

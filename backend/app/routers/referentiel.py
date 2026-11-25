@@ -1,9 +1,10 @@
 """Données de référence : niveaux, séries, années scolaires."""
 
-from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi import APIRouter, HTTPException, status
 from sqlalchemy import select
 
-from app.core.deps import CurrentUser, DbSession, require_roles
+from app.core.deps import CurrentUser, DbSession, ecriture, lecture
+from app.core.permissions import Domaine
 from app.models import AnneeScolaire, Ecole, Niveau, Serie, Trimestre
 from app.schemas import (
     AnneeScolaireCreate,
@@ -18,7 +19,7 @@ from app.schemas import (
 
 router = APIRouter(tags=["référentiel"])
 
-AdminOnly = Depends(require_roles("admin"))
+Parametrer = ecriture(Domaine.PARAMETRAGE)
 
 
 @router.get("/ecole", response_model=EcoleOut)
@@ -54,7 +55,7 @@ def lister_annees(user: CurrentUser, db: DbSession):
     "/annees-scolaires",
     response_model=AnneeScolaireOut,
     status_code=status.HTTP_201_CREATED,
-    dependencies=[AdminOnly],
+    dependencies=[Parametrer],
 )
 def creer_annee(data: AnneeScolaireCreate, user: CurrentUser, db: DbSession):
     if data.date_fin <= data.date_debut:
@@ -86,7 +87,7 @@ def creer_annee(data: AnneeScolaireCreate, user: CurrentUser, db: DbSession):
     return annee
 
 
-@router.patch("/annees-scolaires/{annee_id}", response_model=AnneeScolaireOut, dependencies=[AdminOnly])
+@router.patch("/annees-scolaires/{annee_id}", response_model=AnneeScolaireOut, dependencies=[Parametrer])
 def modifier_annee(annee_id: int, data: AnneeScolaireUpdate, user: CurrentUser, db: DbSession):
     annee = db.get(AnneeScolaire, annee_id)
     if annee is None or annee.ecole_id != user.ecole_id:
@@ -133,7 +134,7 @@ def lister_trimestres(user: CurrentUser, db: DbSession, annee_scolaire_id: int |
     return list(db.scalars(stmt))
 
 
-@router.patch("/trimestres/{trimestre_id}", response_model=TrimestreOut, dependencies=[AdminOnly])
+@router.patch("/trimestres/{trimestre_id}", response_model=TrimestreOut, dependencies=[Parametrer])
 def modifier_trimestre(trimestre_id: int, data: TrimestreUpdate, user: CurrentUser, db: DbSession):
     tri = db.get(Trimestre, trimestre_id)
     if tri is None:

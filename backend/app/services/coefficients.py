@@ -12,7 +12,7 @@ from decimal import Decimal
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
-from app.models import Coefficient, CoefficientDefaut
+from app.models import Coefficient, CoefficientDefaut, Matiere
 
 
 class CoefficientIntrouvable(Exception):
@@ -72,7 +72,11 @@ def matieres_de_la_classe(db: Session, *, ecole_id: int, niveau_id: int, serie_i
     qui correspond (la valeur par défaut ne suffit pas à faire exister
     une matière dans une classe).
     """
-    rows = db.scalars(select(Coefficient).where(Coefficient.ecole_id == ecole_id)).all()
+    rows = db.scalars(
+        select(Coefficient)
+        .join(Matiere, Matiere.id == Coefficient.matiere_id)
+        .where(Coefficient.ecole_id == ecole_id, Matiere.evaluee.is_(True))
+    ).all()
     par_matiere: dict[int, object] = {}
     for r in rows:
         if r.niveau_id is not None and r.niveau_id != niveau_id:

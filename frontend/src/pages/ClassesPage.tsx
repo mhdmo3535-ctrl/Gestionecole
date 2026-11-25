@@ -5,12 +5,12 @@ import { useNavigate } from "react-router-dom";
 import { messageErreur } from "../api/client";
 import { getAnneesScolaires, getClasses, getNiveaux, supprimerClasse } from "../api/endpoints";
 import type { Classe } from "../api/types";
-import { useAuth } from "../auth/AuthContext";
 import { ClasseFormModal } from "./classes/ClasseFormModal";
+import { useDroits } from "../auth/droits";
 
 export function ClassesPage() {
-  const { utilisateur } = useAuth();
-  const estAdmin = utilisateur?.role === "admin";
+  const { peut } = useDroits();
+  const peutGerer = peut("pedagogie", true);
   const { message } = AntApp.useApp();
   const navigate = useNavigate();
   const qc = useQueryClient();
@@ -53,7 +53,7 @@ export function ClassesPage() {
     <Card
       title="Classes"
       extra={
-        estAdmin && (
+        peutGerer && (
           <Button type="primary" onClick={ouvrirCreation}>
             Nouvelle classe
           </Button>
@@ -108,7 +108,7 @@ export function ClassesPage() {
             ),
           },
           { title: "Effectif", dataIndex: "effectif", width: 100, align: "center" },
-          ...(estAdmin
+          ...(peutGerer
             ? [
                 {
                   title: "",

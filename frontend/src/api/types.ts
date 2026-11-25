@@ -1,4 +1,28 @@
-export type Role = "admin" | "enseignant" | "parent" | "eleve";
+export type Role =
+  | "directeur"
+  | "censeur"
+  | "surveillant"
+  | "comptable"
+  | "secretaire"
+  | "enseignant"
+  | "parent"
+  | "eleve";
+
+/** Domaines de droits, identiques à backend/app/core/permissions.py. */
+export type Domaine =
+  | "personnel"
+  | "parametrage"
+  | "pedagogie"
+  | "notes"
+  | "bulletins"
+  | "eleves"
+  | "medical"
+  | "vie_scolaire"
+  | "encaissements"
+  | "finances"
+  | "bilans";
+
+export type MatriceDroits = Record<Domaine, { lire: Role[]; ecrire: Role[] }>;
 
 export interface Utilisateur {
   id: number;
@@ -6,7 +30,7 @@ export interface Utilisateur {
   nom: string;
   prenom: string;
   email: string;
-  role: Role;
+  roles: Role[];
   telephone: string | null;
   actif: boolean;
 }
@@ -127,6 +151,15 @@ export interface Permission {
   traite_le: string | null;
 }
 
+/** Une demande vue depuis la liste de toute l'école. */
+export interface PermissionEcole extends Permission {
+  eleve_nom: string;
+  matricule: string;
+  classe_nom: string | null;
+  traite_par_nom: string | null;
+  demande_le: string;
+}
+
 export type LienParent = "pere" | "mere" | "tuteur";
 
 export interface ParentTuteur {
@@ -146,6 +179,8 @@ export interface Matiere {
   code: string | null;
   est_choix_langue: boolean;
   note_directe: boolean;
+  /** false : cours sans note (Travaux dirigés…) — à l'emploi du temps, hors moyennes */
+  evaluee: boolean;
 }
 
 export interface Coefficient {
@@ -368,3 +403,91 @@ export interface NoteHistorique {
   auteur_nom: string | null;
   le: string;
 }
+
+// ---------- Tableau de bord ----------
+
+export interface TdbLigne {
+  classe_id: number | null;
+  libelle: string;
+  niveau_nom: string;
+  effectif: number;
+  moyenne: number | null;
+  taux_reussite: number | null;
+  taux_presence: number | null;
+  taux_recouvrement: number | null;
+}
+
+export interface TableauDeBord {
+  trimestre: { id: number; numero: number; annee_libelle: string } | null;
+  periode_presence: { debut: string; fin: string; jours_ouvres: number } | null;
+  effectifs: {
+    eleves_actifs: number;
+    filles: number;
+    garcons: number;
+    classes: number;
+    enseignants_actifs: number;
+  };
+  scolarite: { moyenne_ecole: number | null; taux_reussite: number | null; eleves_notes: number } | null;
+  vie_scolaire: {
+    taux_presence: number | null;
+    jours_absence: number;
+    retards: number;
+    permissions_en_attente: number;
+  } | null;
+  finances: {
+    annee_libelle: string;
+    attendu: number;
+    encaisse: number;
+    reste: number;
+    taux_recouvrement: number | null;
+    encaisse_mois: number;
+    eleves_en_retard: number;
+  } | null;
+  alertes: Array<{
+    code: string;
+    niveau: "attention" | "info";
+    libelle: string;
+    nombre: number;
+    lien: string | null;
+  }>;
+  classes: TdbLigne[];
+  niveaux: TdbLigne[];
+}
+
+// ---------- Emploi du temps ----------
+
+/** 1 = lundi … 6 = samedi */
+export type Jour = 1 | 2 | 3 | 4 | 5 | 6;
+
+export interface Creneau {
+  id: number;
+  classe_id: number;
+  classe_nom: string;
+  matiere_id: number;
+  matiere_nom: string;
+  enseignant_id: number;
+  enseignant_nom: string;
+  jour: Jour;
+  heure_debut: string; // "07:30:00"
+  heure_fin: string;
+  duree_minutes: number;
+}
+
+export interface CreneauPayload {
+  classe_id: number;
+  matiere_id: number;
+  enseignant_id: number;
+  jour: Jour;
+  heure_debut: string; // "07:30"
+  heure_fin: string;
+  /** Affecter le professeur à la classe pour cette matière s'il ne l'est pas encore. */
+  creer_affectation?: boolean;
+}
+
+export interface AffectationClasse {
+  enseignant_id: number;
+  enseignant_nom: string;
+  matiere_id: number;
+  matiere_nom: string;
+}
+

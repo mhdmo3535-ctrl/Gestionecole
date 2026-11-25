@@ -13,12 +13,13 @@
 
 from typing import Annotated
 
-from fastapi import APIRouter, Depends, HTTPException, Query, status
+from fastapi import APIRouter, HTTPException, Query, status
 from sqlalchemy import select
 from sqlalchemy.orm import Session, aliased
 
 from app.calcul import arrondi_affichage, evaluer_matiere
-from app.core.deps import CurrentUser, DbSession, require_roles
+from app.core.deps import CurrentUser, DbSession, lecture
+from app.core.permissions import Domaine, peut
 from app.models import (
     AnneeScolaire,
     Classe,
@@ -34,7 +35,7 @@ from app.schemas import NoteEcrire, NoteHistoriqueOut, NoteOut
 
 router = APIRouter(prefix="/notes", tags=["notes"])
 
-AdminOnly = Depends(require_roles("admin"))
+LireNotes = lecture(Domaine.NOTES)
 CHAMPS_EVAL = ("interro1", "interro2", "interro3", "devoir1", "devoir2")
 CHAMPS_NOTE = (*CHAMPS_EVAL, "note_directe", "appreciation")
 
@@ -82,7 +83,7 @@ def _est_professeur_principal(db: Session, user_id: int, classe_id: int | None) 
 
 def _peut_saisir(db: Session, user: Utilisateur, eleve: Eleve, matiere: Matiere) -> bool:
     """Seul l'enseignant concerné saisit : jamais l'administration."""
-    if user.role != "enseignant":
+    if not user.est_enseignant:
         return False
     if matiere.note_directe:
         return _est_professeur_principal(db, user.id, eleve.classe_id)
@@ -90,7 +91,7 @@ def _peut_saisir(db: Session, user: Utilisateur, eleve: Eleve, matiere: Matiere)
 
 
 def _peut_consulter(db: Session, user: Utilisateur, eleve: Eleve, matiere: Matiere) -> bool:
-    return user.role == "admin" or _peut_saisir(db, user, eleve, matiere)
+    return peut(user.roles, Domaine.NOTES) or _peut_saisir(db, user, eleve, matiere)
 
 
 def _valeurs(note: Note) -> dict:
@@ -174,7 +175,7 @@ def lister_notes(
     if matiere_id is not None:
         stmt = stmt.where(Note.matiere_id == matiere_id)
 
-    if user.role != "admin":
+    if not peut(user.roles, Domaine.NOTES):
         affectees = set(
             db.scalars(
                 select(EnseignantAffectation.matiere_id).where(
@@ -200,7 +201,7 @@ def lister_notes(
     return [_vers_out(n, cache[n.matiere_id]) for n in notes]
 
 
-@router.get("/historique", response_model=list[NoteHistoriqueOut], dependencies=[AdminOnly])
+@router.get("/historique", response_model=list[NoteHistoriqueOut], dependencies=[LireNotes])
 def historique_notes(
     user: CurrentUser,
     db: DbSession,
@@ -210,7 +211,7 @@ def historique_notes(
     matiere_id: int | None = None,
     limite: Annotated[int, Query(ge=1, le=1000)] = 200,
 ):
-    """Journal des saisies (le plus récent d'abord), réservé à l'administration."""
+    """Journal des saisies (le plus récent d'abord), réservé au directeur et au censeur."""
     Auteur = aliased(Utilisateur)
     stmt = (
         select(NoteHistorique, Eleve, Matiere, Auteur)
@@ -265,9 +266,14 @@ def consulter_note(note_id: int, user: CurrentUser, db: DbSession):
 def enregistrer_note(data: NoteEcrire, user: CurrentUser, db: DbSession):
     eleve = _eleve_de_lecole(db, data.eleve_id, user.ecole_id)
     matiere = _matiere_de_lecole(db, data.matiere_id, user.ecole_id)
+    if not matiere.evaluee:
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+            detail=f"« {matiere.nom} » n'est pas notée : on ne peut pas y saisir de note.",
+        )
     _trimestre_de_lecole(db, data.trimestre_id, user.ecole_id)
 
-    if user.role != "enseignant":
+    if not user.est_enseignant:
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
             detail="Les notes ne peuvent être saisies ou modifiées que par l'enseignant concerné.",

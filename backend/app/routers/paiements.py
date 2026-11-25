@@ -11,11 +11,12 @@
 import datetime as _dt
 from decimal import Decimal
 
-from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi import APIRouter, HTTPException, status
 from sqlalchemy import func, select
 from sqlalchemy.orm import Session
 
-from app.core.deps import CurrentUser, DbSession, require_roles
+from app.core.deps import CurrentUser, DbSession, ecriture, lecture
+from app.core.permissions import Domaine
 from app.models import (
     AnneeScolaire,
     Classe,
@@ -38,7 +39,12 @@ from app.schemas import (
     TrancheUpdate,
 )
 
-router = APIRouter(tags=["paiements"], dependencies=[Depends(require_roles("admin"))])
+router = APIRouter(tags=["paiements"])
+
+LireFinances = lecture(Domaine.FINANCES)
+GererFinances = ecriture(Domaine.FINANCES)
+LireEncaissements = lecture(Domaine.ENCAISSEMENTS)
+Encaisser = ecriture(Domaine.ENCAISSEMENTS)
 
 
 # ---------- Utilitaires ----------
@@ -162,7 +168,7 @@ def _vers_tranche_out(db: Session, t: TranchePaiement) -> TrancheOut:
 
 # ---------- Tranches ----------
 
-@router.get("/paiements/tranches", response_model=list[TrancheOut])
+@router.get("/paiements/tranches", response_model=list[TrancheOut], dependencies=[LireFinances])
 def lister_tranches(user: CurrentUser, db: DbSession, annee_scolaire_id: int | None = None):
     annee = _annee(db, user.ecole_id, annee_scolaire_id)
     if annee is None:
@@ -170,7 +176,7 @@ def lister_tranches(user: CurrentUser, db: DbSession, annee_scolaire_id: int | N
     return [_vers_tranche_out(db, t) for t in _tranches(db, user.ecole_id, annee.id)]
 
 
-@router.post("/paiements/tranches", response_model=TrancheOut, status_code=status.HTTP_201_CREATED)
+@router.post("/paiements/tranches", response_model=TrancheOut, status_code=status.HTTP_201_CREATED, dependencies=[GererFinances])
 def creer_tranche(data: TrancheCreate, user: CurrentUser, db: DbSession):
     annee = _annee_requise(db, user.ecole_id, data.annee_scolaire_id)
     dernier = db.scalar(
@@ -193,7 +199,7 @@ def creer_tranche(data: TrancheCreate, user: CurrentUser, db: DbSession):
     return _vers_tranche_out(db, t)
 
 
-@router.patch("/paiements/tranches/{tranche_id}", response_model=TrancheOut)
+@router.patch("/paiements/tranches/{tranche_id}", response_model=TrancheOut, dependencies=[GererFinances])
 def modifier_tranche(tranche_id: int, data: TrancheUpdate, user: CurrentUser, db: DbSession):
     t = _tranche(db, tranche_id, user.ecole_id)
     champs = data.model_dump(exclude_unset=True)
@@ -224,7 +230,7 @@ def modifier_tranche(tranche_id: int, data: TrancheUpdate, user: CurrentUser, db
     return _vers_tranche_out(db, t)
 
 
-@router.delete("/paiements/tranches/{tranche_id}", status_code=status.HTTP_204_NO_CONTENT)
+@router.delete("/paiements/tranches/{tranche_id}", status_code=status.HTTP_204_NO_CONTENT, dependencies=[GererFinances])
 def supprimer_tranche(tranche_id: int, user: CurrentUser, db: DbSession):
     t = _tranche(db, tranche_id, user.ecole_id)
     if db.scalar(select(func.count()).select_from(Paiement).where(Paiement.tranche_id == t.id)):
@@ -279,7 +285,7 @@ def _situation(db: Session, eleve: Eleve, aujourd_hui: _dt.date) -> SituationEle
     )
 
 
-@router.get("/eleves/{eleve_id}/paiements", response_model=SituationEleve)
+@router.get("/eleves/{eleve_id}/paiements", response_model=SituationEleve, dependencies=[LireEncaissements])
 def situation_eleve(eleve_id: int, user: CurrentUser, db: DbSession):
     eleve = _eleve(db, eleve_id, user.ecole_id)
     return _situation(db, eleve, _dt.date.today())
@@ -289,6 +295,7 @@ def situation_eleve(eleve_id: int, user: CurrentUser, db: DbSession):
     "/eleves/{eleve_id}/paiements",
     response_model=PaiementOut,
     status_code=status.HTTP_201_CREATED,
+    dependencies=[Encaisser],
 )
 def enregistrer_paiement(eleve_id: int, data: PaiementCreate, user: CurrentUser, db: DbSession):
     eleve = _eleve(db, eleve_id, user.ecole_id)
@@ -328,7 +335,7 @@ def enregistrer_paiement(eleve_id: int, data: PaiementCreate, user: CurrentUser,
     return _vers_paiement_out(db, p)
 
 
-@router.delete("/eleves/{eleve_id}/paiements/{paiement_id}", status_code=status.HTTP_204_NO_CONTENT)
+@router.delete("/eleves/{eleve_id}/paiements/{paiement_id}", status_code=status.HTTP_204_NO_CONTENT, dependencies=[GererFinances])
 def annuler_paiement(eleve_id: int, paiement_id: int, user: CurrentUser, db: DbSession):
     _eleve(db, eleve_id, user.ecole_id)
     p = db.get(Paiement, paiement_id)
@@ -340,7 +347,7 @@ def annuler_paiement(eleve_id: int, paiement_id: int, user: CurrentUser, db: DbS
 
 # ---------- Reçu ----------
 
-@router.get("/paiements/{paiement_id}/recu", response_model=RecuOut)
+@router.get("/paiements/{paiement_id}/recu", response_model=RecuOut, dependencies=[LireEncaissements])
 def recu(paiement_id: int, user: CurrentUser, db: DbSession):
     p = db.get(Paiement, paiement_id)
     if p is None:
@@ -381,7 +388,7 @@ def recu(paiement_id: int, user: CurrentUser, db: DbSession):
 
 # ---------- Suivi d'ensemble ----------
 
-@router.get("/paiements/suivi", response_model=SuiviPaiements)
+@router.get("/paiements/suivi", response_model=SuiviPaiements, dependencies=[LireFinances])
 def suivi(
     user: CurrentUser,
     db: DbSession,

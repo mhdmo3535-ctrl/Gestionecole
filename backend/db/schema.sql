@@ -108,10 +108,14 @@ CREATE TABLE utilisateurs (
     -- Une personne travaillant dans deux écoles utilise deux adresses.
     email           VARCHAR(150) NOT NULL UNIQUE,
     mot_de_passe_hash VARCHAR(255) NOT NULL,
-    -- rôle unique "admin" sans sous-niveaux, conforme
-    -- (parent/eleve sont inclus ici aussi car le compte peut être créé
-    -- côté web par l'admin même si la connexion se fait sur mobile)
-    role            VARCHAR(20) NOT NULL CHECK (role IN ('admin', 'enseignant', 'parent', 'eleve')),
+    -- un ou plusieurs rôles (cumul possible) ;
+    -- droits définis dans backend/app/core/permissions.py.
+    -- parent/eleve : comptes mobiles, créés depuis la fiche élève.
+    roles           VARCHAR(20)[] NOT NULL CHECK (
+        cardinality(roles) >= 1
+        AND roles <@ ARRAY['directeur', 'censeur', 'surveillant', 'comptable', 'secretaire',
+                           'enseignant', 'parent', 'eleve']::VARCHAR(20)[]
+    ),
     telephone       VARCHAR(30),
     actif           BOOLEAN NOT NULL DEFAULT true,
     created_at      TIMESTAMPTZ NOT NULL DEFAULT now()
@@ -157,6 +161,11 @@ CREATE TABLE matieres (
     -- moyenne générale du trimestre avec son coefficient, comme une matière
     -- ordinaire (cf notes.note_directe).
     note_directe        BOOLEAN NOT NULL DEFAULT false,
+    -- evaluee = false : cours sans note (ex : Travaux dirigés). Il figure à
+    -- l'emploi du temps (et compte dans les heures du professeur) mais n'a ni
+    -- coefficient, ni note, ni place au bulletin.
+    evaluee             BOOLEAN NOT NULL DEFAULT true,
+    CHECK (evaluee OR NOT note_directe),
     UNIQUE (ecole_id, nom)
 );
 
@@ -212,6 +221,23 @@ CREATE TABLE enseignant_affectations (
     matiere_id      BIGINT NOT NULL REFERENCES matieres(id) ON DELETE CASCADE,
     UNIQUE (enseignant_id, classe_id, matiere_id)
 );
+
+-- Emploi du temps : établi par le censeur.
+-- Un créneau = une classe, une matière, un professeur affecté, un jour, un horaire libre.
+-- Les chevauchements (même classe ou même professeur) sont refusés par l'API.
+CREATE TABLE creneaux (
+    id              BIGSERIAL PRIMARY KEY,
+    ecole_id        BIGINT NOT NULL REFERENCES ecoles(id) ON DELETE CASCADE,
+    classe_id       BIGINT NOT NULL REFERENCES classes(id) ON DELETE CASCADE,
+    matiere_id      BIGINT NOT NULL REFERENCES matieres(id) ON DELETE CASCADE,
+    enseignant_id   BIGINT NOT NULL REFERENCES utilisateurs(id) ON DELETE CASCADE,
+    jour            SMALLINT NOT NULL CHECK (jour BETWEEN 1 AND 6),   -- 1 = lundi … 6 = samedi
+    heure_debut     TIME NOT NULL,
+    heure_fin       TIME NOT NULL,
+    CHECK (heure_fin > heure_debut)
+);
+CREATE INDEX idx_creneaux_classe ON creneaux (classe_id, jour);
+CREATE INDEX idx_creneaux_enseignant ON creneaux (enseignant_id, jour);
 
 -- =====================================================================
 -- 4. ÉLÈVES

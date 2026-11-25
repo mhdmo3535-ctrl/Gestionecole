@@ -5,7 +5,7 @@ import { useState } from "react";
 import { useNavigate, useParams } from "react-router-dom";
 import { getClasse, getElevesDeLaClasse, getMatieresDeLaClasse } from "../../api/endpoints";
 import type { ClasseMatiere, Eleve } from "../../api/types";
-import { useAuth } from "../../auth/AuthContext";
+import { useDroits } from "../../auth/droits";
 import { ClasseFormModal } from "./ClasseFormModal";
 import { HistoriqueNotesTab } from "./HistoriqueNotesTab";
 
@@ -13,8 +13,9 @@ export function ClasseDetailPage() {
   const { id } = useParams();
   const classeId = Number(id);
   const navigate = useNavigate();
-  const { utilisateur } = useAuth();
-  const estAdmin = utilisateur?.role === "admin";
+  const { peut } = useDroits();
+  const peutGerer = peut("pedagogie", true);
+  const voitNotes = peut("notes");
   const [editionOuverte, setEditionOuverte] = useState(false);
 
   const classeQuery = useQuery({
@@ -83,7 +84,7 @@ export function ClasseDetailPage() {
             </Typography.Text>
           </Space>
         }
-        extra={estAdmin && <Button onClick={() => setEditionOuverte(true)}>Modifier</Button>}
+        extra={peutGerer && <Button onClick={() => setEditionOuverte(true)}>Modifier</Button>}
       >
         <Tabs
           defaultActiveKey="eleves"
@@ -145,7 +146,7 @@ export function ClasseDetailPage() {
                 />
               ),
             },
-            ...(estAdmin
+            ...(voitNotes
               ? [
                   {
                     key: "historique",
